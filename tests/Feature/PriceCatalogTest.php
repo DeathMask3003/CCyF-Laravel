@@ -30,6 +30,8 @@ class PriceCatalogTest extends TestCase
         Schema::connection('legacy')->create('tm_usuario', function (Blueprint $table): void {
             $table->increments('usu_id');
             $table->string('usu_area');
+            $table->string('usu_correo')->nullable();
+            $table->string('usu_telf')->nullable();
             $table->integer('rol_id');
             $table->string('usu_pass');
         });
@@ -114,8 +116,8 @@ class PriceCatalogTest extends TestCase
         });
 
         DB::connection('legacy')->table('tm_usuario')->insert([
-            ['usu_id' => 1, 'usu_area' => 'Administración', 'rol_id' => 18, 'usu_pass' => 'x'],
-            ['usu_id' => 2, 'usu_area' => 'Concursante', 'rol_id' => 9, 'usu_pass' => 'x'],
+            ['usu_id' => 1, 'usu_area' => 'Administración', 'usu_correo' => 'admin@example.test', 'usu_telf' => '7220000001', 'rol_id' => 18, 'usu_pass' => 'x'],
+            ['usu_id' => 2, 'usu_area' => 'Concursante', 'usu_correo' => 'persona@example.test', 'usu_telf' => '7220000002', 'rol_id' => 9, 'usu_pass' => 'x'],
         ]);
         DB::connection('legacy')->table('tm_categoria_widi')->insert([
             ['cat_id' => 2, 'cat_nom' => 'SEPTIMA', 'est' => 0],
@@ -582,6 +584,50 @@ class PriceCatalogTest extends TestCase
             ->assertHeader('Content-Type', 'application/pdf')
             ->assertHeader('Content-Disposition', 'attachment; filename=prop_escrito-700.pdf');
         $this->get('/convocatorias-finalizadas/historico/700/archivo/acta_nac')->assertNotFound();
+    }
+
+    public function test_finalized_exports_match_original_columns_filters_and_permissions(): void
+    {
+        DB::connection('legacy')->table('tm_documento')->insert([
+            ['doc_id' => 700, 'num_doc' => '8', 'trami_id' => 3, 'tipo_id' => 1,
+                'area_id' => 23, 'usu_id' => 2, 'doc_estado' => 'Finalizado',
+                'doc_exter' => 'Plantel Atlacomulco', 'doc_respuesta' => 'Propuesta aceptada',
+                'fech_crea' => '2026-09-01 09:00:00', 'fech_concluido' => '2026-09-10 12:30:00'],
+            ['doc_id' => 701, 'num_doc' => '9', 'trami_id' => 4, 'tipo_id' => 1,
+                'area_id' => 24, 'usu_id' => 1, 'doc_estado' => 'Finalizado',
+                'doc_exter' => 'CEMSaD Acambay', 'doc_respuesta' => 'Propuesta no aceptada',
+                'fech_crea' => '2026-09-02 09:00:00', 'fech_concluido' => '2026-09-11 13:30:00'],
+        ]);
+        $this->asUser(1);
+        $this->get('/convocatorias-finalizadas?convocatoria=9')->assertOk()->assertSee('HIST-00701')->assertDontSee('HIST-00700');
+        $pdf = $this->get('/convocatorias-finalizadas/exportar/pdf?convocatoria=9');
+        $pdf->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+
+        $excel = $this->get('/convocatorias-finalizadas/exportar/xlsx?servicio=1');
+        $excel->assertOk()->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $path = tempnam(sys_get_temp_dir(), 'ccyf-xlsx-');
+        file_put_contents($path, $excel->streamedContent());
+        try {
+            $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getActiveSheet();
+            $this->assertSame('# Registro', $sheet->getCell('A4')->getValue());
+            $this->assertSame('Documento', $sheet->getCell('J4')->getValue());
+            $this->assertSame('09-2026-700', $sheet->getCell('A5')->getValue());
+            $this->assertSame('persona@example.test', $sheet->getCell('C5')->getValue());
+            $this->assertSame('7220000002', $sheet->getCell('D5')->getValue());
+            $this->assertSame('Finalizado - Propuesta aceptada', $sheet->getCell('H5')->getValue());
+            $this->assertSame('10-09-2026 12:30:00', $sheet->getCell('I5')->getValue());
+            $this->assertSame('Ver expediente', $sheet->getCell('J5')->getValue());
+            $this->assertNull($sheet->getCell('A6')->getValue());
+        } finally {
+            unlink($path);
+        }
+
+        $this->asUser(2);
+        $personal = $this->get('/convocatorias-finalizadas/exportar/xlsx');
+        $personal->assertOk();
+        $this->assertStringContainsString('attachment', $personal->headers->get('Content-Disposition'));
+        $this->get('/convocatorias-finalizadas/exportar/csv')->assertNotFound();
     }
 
     private function reviewRecord(): int

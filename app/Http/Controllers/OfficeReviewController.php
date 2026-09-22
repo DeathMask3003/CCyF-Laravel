@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\FinishedRecords;
 use App\Services\LegacyMenu;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,76 +34,14 @@ class OfficeReviewController extends Controller
         ]);
     }
 
-    public function finished(Request $request, LegacyMenu $menu): View
+    public function finished(Request $request, LegacyMenu $menu, FinishedRecords $finishedRecords): View
     {
-        $canReview = $menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio');
-        $owns = $menu->allows($request->user(), 'NuevoOficio');
-        abort_unless($canReview || $owns, 403);
-
-        $local = $this->localRecords()->where('registro.estado', 'Finalizado');
-        if (! $canReview) {
-            $local->where('registro.usu_id', $request->user()->getKey());
-        }
-        $this->applyFilters($local, $request);
-        $localRows = $local->get()->map(function ($row) {
-            $row->origen = 'actual';
-            $row->fecha_orden = $row->finalizado_at;
-            return $row;
-        });
-
-        $legacy = DB::connection('legacy')->table('tm_documento as documento')
-            ->leftJoin('tm_usuario as usuario', 'usuario.usu_id', '=', 'documento.usu_id')
-            ->leftJoin('tm_areas as plantel', 'plantel.area_id', '=', 'documento.area_id')
-            ->leftJoin('tm_categoria_widi as convocatoria', 'convocatoria.cat_id', '=', 'documento.num_doc')
-            ->leftJoin('tm_tramite as servicio', 'servicio.trami_id', '=', 'documento.trami_id')
-            ->where('documento.doc_estado', 'Finalizado')->whereIn('documento.trami_id', [3, 4]);
-        if (! $canReview) {
-            $legacy->where('documento.usu_id', $request->user()->getKey());
-        }
-        if ($request->filled('servicio')) {
-            $legacyId = DB::table('ccyf_tipos_servicio')->where('id', (int) $request->input('servicio'))->value('legacy_trami_id');
-            $legacy->where('documento.trami_id', $legacyId ?: -1);
-        }
-        if ($request->filled('convocatoria')) {
-            $legacyId = DB::table('ccyf_convocatorias')->where('id', (int) $request->input('convocatoria'))->value('legacy_cat_id');
-            $legacy->where('documento.num_doc', $legacyId ?: -1);
-        }
-        if ($request->filled('buscar')) {
-            $search = trim($request->input('buscar'));
-            $term = '%'.$search.'%';
-            $legacy->where(function ($query) use ($term, $search): void {
-                $query->where('usuario.usu_area', 'like', $term)
-                    ->orWhere('plantel.area_nom', 'like', $term)
-                    ->orWhere('documento.doc_exter', 'like', $term)
-                    ->orWhere('convocatoria.cat_nom', 'like', $term);
-                if (preg_match('/^HIST-(\d+)$/i', $search, $match)) {
-                    $query->orWhere('documento.doc_id', (int) $match[1]);
-                }
-            });
-        }
-        $legacyRows = $legacy->get([
-            'documento.doc_id as id', 'documento.usu_id', 'documento.doc_exter as plantel_nombre',
-            'documento.trami_id as servicio_id', 'documento.num_doc as convocatoria_id',
-            'documento.doc_estado as estado', 'documento.doc_designado as designado',
-            'documento.doc_respuesta as respuesta', 'documento.fech_concluido as finalizado_at',
-            'documento.fech_crea as enviado_at', 'usuario.usu_area as solicitante',
-            'convocatoria.cat_nom as convocatoria_nombre', 'servicio.trami_nom as servicio_nombre',
-            'plantel.area_nom as plantel_real',
-        ])->map(function ($row) {
-            $row->folio = 'HIST-'.str_pad((string) $row->id, 5, '0', STR_PAD_LEFT);
-            $row->plantel_nombre = $row->plantel_nombre ?: $row->plantel_real;
-            $row->decision = (int) $row->designado === 1 ? 'Designado'
-                : (str_contains(mb_strtolower((string) $row->respuesta), 'no aceptad') ? 'no_aceptado' : 'No designado');
-            $row->origen = 'historico';
-            $row->fecha_orden = $row->finalizado_at ?: $row->enviado_at;
-            return $row;
-        });
-
-        $all = $localRows->concat($legacyRows)->sortByDesc('fecha_orden')->values();
+        $all = $finishedRecords->forRequest($request, $menu);
         $page = max(1, LengthAwarePaginator::resolveCurrentPage());
         $records = new LengthAwarePaginator($all->forPage($page, 15)->values(), $all->count(), 15, $page, [
             'path' => $request->url(), 'query' => $request->query(),
         ]);
+        $canReview = $menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio');
 
         return view('revision.finished', [
             'records' => $records, 'total' => $all->count(), 'canReview' => $canReview,
@@ -264,7 +203,7 @@ class OfficeReviewController extends Controller
     private function services()
     {
         return DB::table('ccyf_tipos_servicio')->whereIn('legacy_trami_id', [3, 4])
-            ->orWhere('activo', true)->orderBy('nombre')->get(['id', 'nombre']);
+            ->orWhere('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'legacy_trami_id']);
     }
 
     private function authorizeRecord(Request $request, LegacyMenu $menu, int $owner, string $state): void

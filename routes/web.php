@@ -5,6 +5,7 @@ use App\Http\Controllers\CampusController;
 use App\Http\Controllers\ConvocationController;
 use App\Http\Controllers\ConvocationLinkController;
 use App\Http\Controllers\DocumentTypeController;
+use App\Http\Controllers\FinishedExportController;
 use App\Http\Controllers\NewOfficeController;
 use App\Http\Controllers\OfficeReviewController;
 use App\Http\Controllers\PriceCatalogController;
@@ -34,6 +35,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/convocatorias-pendientes', [OfficeReviewController::class, 'pending'])->name('revision.pending');
     Route::post('/convocatorias-pendientes/no-aceptadas', [OfficeReviewController::class, 'rejectBulk'])->name('revision.reject-bulk');
     Route::get('/convocatorias-finalizadas', [OfficeReviewController::class, 'finished'])->name('revision.finished');
+    Route::get('/convocatorias-finalizadas/exportar/{format}', [FinishedExportController::class, 'download'])
+        ->whereIn('format', ['pdf', 'xlsx'])->name('revision.export');
     Route::get('/expedientes/{record}', [OfficeReviewController::class, 'show'])->whereNumber('record')->name('revision.show');
     Route::post('/expedientes/{record}/finalizar', [OfficeReviewController::class, 'finish'])->whereNumber('record')->name('revision.finish');
     Route::get('/expedientes/{record}/archivos/{file}', [OfficeReviewController::class, 'file'])->whereNumber(['record', 'file'])->name('revision.file');
