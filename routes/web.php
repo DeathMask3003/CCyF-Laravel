@@ -13,6 +13,8 @@ use App\Http\Controllers\OfficeReviewController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\PriceCatalogController;
+use App\Http\Controllers\PermitTrackingController;
+use App\Http\Controllers\PermitTrackingExportController;
 use App\Http\Controllers\ServiceTypeController;
 use Illuminate\Support\Facades\Route;
 
@@ -51,6 +53,13 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/expedientes/{record}/archivos/{file}', [OfficeReviewController::class, 'file'])->whereNumber(['record', 'file'])->name('revision.file');
     Route::get('/convocatorias-finalizadas/historico/{record}', [OfficeReviewController::class, 'historical'])->whereNumber('record')->name('revision.historical');
     Route::get('/convocatorias-finalizadas/historico/{record}/archivo/{key}', [OfficeReviewController::class, 'historicalFile'])->whereNumber('record')->name('revision.historical-file');
+
+    Route::get('/seguimiento-permisionarios', [PermitTrackingController::class, 'index'])->name('seguimiento.index');
+    Route::put('/seguimiento-permisionarios/{key}', [PermitTrackingController::class, 'save'])->name('seguimiento.save');
+    Route::put('/seguimiento-permisionarios/{key}/renovar', [PermitTrackingController::class, 'renew'])->name('seguimiento.renew');
+    Route::get('/seguimiento-permisionarios/{key}/archivos/{number}', [PermitTrackingController::class, 'file'])->whereNumber('number')->name('seguimiento.file');
+    Route::get('/seguimiento-permisionarios/{key}/expediente', [PermitTrackingController::class, 'zip'])->name('seguimiento.zip');
+    Route::get('/seguimiento-permisionarios/exportar/{format}', [PermitTrackingExportController::class, 'download'])->whereIn('format', ['pdf', 'xlsx', 'csv'])->name('seguimiento.export');
 
     Route::get('/catalogos', [PriceCatalogController::class, 'index'])->name('catalogos.index');
     Route::get('/catalogos/{category}', [PriceCatalogController::class, 'show'])->whereNumber('category')->name('catalogos.show');

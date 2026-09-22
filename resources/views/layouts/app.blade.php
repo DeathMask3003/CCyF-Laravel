@@ -25,6 +25,7 @@
                 @php($canLinks = $ccyfMenu->allows(auth()->user(), 'Subcategorias_widi'))
                 @php($canPending = $ccyfMenu->allows(auth()->user(), 'gestionOficio'))
                 @php($canFinished = $ccyfMenu->allows(auth()->user(), 'buscarOficio') || $canPending || $ccyfMenu->allows(auth()->user(), 'NuevoOficio'))
+                @php($canTracking = $ccyfMenu->allows(auth()->user(), 'seguimiento_permisionarios'))
                 @php($canUsers = $ccyfMenu->allows(auth()->user(), 'Usuarios'))
                 @php($canRoles = $ccyfMenu->allows(auth()->user(), 'Rol'))
                 <nav class="main-nav" aria-label="Menú principal">
@@ -34,6 +35,7 @@
                     @endif
                     @if ($canPending)<a href="{{ route('revision.pending') }}" aria-label="Convocatorias pendientes" @class(['active' => request()->routeIs('revision.pending')])>Pendientes</a>@endif
                     @if ($canFinished)<a href="{{ route('revision.finished') }}" aria-label="Convocatorias finalizadas" @class(['active' => request()->routeIs('revision.finished', 'revision.historical')])>Finalizadas</a>@endif
+                    @if ($canTracking)<a href="{{ route('seguimiento.index') }}" @class(['active' => request()->routeIs('seguimiento.*')])>Seguimiento</a>@endif
                     @if ($canProducts || $canTypes || $canServices || $canCampuses || $canConvocations || $canLinks)
                         <details class="nav-dropdown">
                             <summary @class(['active' => request()->routeIs('catalogos.*', 'tipos.*', 'servicios.*', 'planteles.*', 'convocatorias.*', 'enlaces.*')])>Catálogos <span aria-hidden="true">⌄</span></summary>
