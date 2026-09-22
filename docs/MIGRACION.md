@@ -4,7 +4,7 @@
 
 La copia heredada se encuentra en `D:\wamp64\www\ccyf`. Contiene 61 áreas de interfaz bajo `alba`, 49 controladores PHP, 52 modelos PHP y un volcado SQL con 84 tablas. El proyecto Laravel se mantiene separado en `D:\wamp64\www\ccyf-laravel` y está fijado a Laravel 12.
 
-Los flujos centrales identificados son acceso y roles, convocatorias, registro de concursantes, documentación, preevaluación, evaluación, calificación, asignación, contratos, seguimiento, quejas, reportes PDF y bitácora. También existen módulos compartidos de WIDI y servicios externos. La paridad de cada flujo requiere contrastar formularios, permisos, consultas, archivos y resultados con la copia heredada.
+Se migrarán únicamente los flujos propios de CCyF: acceso y roles necesarios, convocatorias, concursantes, documentación, preevaluación, evaluación, calificación, selección, contratos, seguimiento de permisionarios, quejas, reportes PDF y bitácora de CCyF. Los módulos generales heredados de WIDI (inventario, tickets, oficios, WIDI-E y catálogos ajenos al concurso) quedan fuera. La paridad de cada flujo requiere contrastar formularios, permisos, consultas, archivos y resultados con la copia heredada.
 
 ## Límites de datos
 
@@ -13,7 +13,7 @@ Los flujos centrales identificados son acceso y roles, convocatorias, registro d
 - No ejecutar migraciones de Laravel sobre la base `ccyf` existente. La conexión `legacy` usa una cuenta local limitada a `SELECT` durante esta fase.
 - Antes de probar escrituras, restaurar una copia aislada con nombre propio y configurar credenciales específicas para ella.
 - Conservar archivos adjuntos y PDFs heredados fuera de `public`; exponerlos después mediante rutas autorizadas por usuario y rol.
-- Apache debe apuntar exclusivamente a `D:\wamp64\www\ccyf-laravel\public`. La raíz del proyecto contiene un `.htaccess` que niega acceso web directo, incluido `.env`.
+- Apache está configurado para `http://localhost:8082` y apunta exclusivamente a `D:\wamp64\www\ccyf-laravel\public`. La raíz del proyecto contiene un `.htaccess` que niega acceso web directo, incluido `.env`.
 
 ## Comprobación inicial
 
@@ -39,5 +39,5 @@ La opción `--check-db` consulta únicamente la existencia de tablas cuando `LEG
 2. Migrar acceso, recuperación, segundo factor y permisos por rol sin rebajar la protección actual.
 3. Migrar convocatorias, concursantes y documentación.
 4. Migrar preevaluación, evaluación, selección, contratos y seguimiento.
-5. Migrar reportes, bitácora, quejas y servicios externos.
+5. Migrar reportes, bitácora y quejas de CCyF.
 6. Validar paridad funcional y permisos con una copia aislada de producción antes de publicar.

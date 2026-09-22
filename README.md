@@ -11,9 +11,8 @@ Funciona el acceso inicial con código por correo y un panel básico. Los módul
 ```powershell
 php artisan ccyf:preflight --check-db
 php artisan test
-php artisan serve --host=127.0.0.1
 ```
 
 El correo usa `MAIL_MAILER=log` durante las pruebas locales. El código se registra en `storage/logs/laravel.log`; no se entrega por correo real. La conexión `legacy` tiene permisos de lectura. No ejecutar `migrate` sobre `ccyf`.
 
-Si se configura Apache, su `DocumentRoot` debe ser la carpeta `public` de este proyecto. El `.htaccess` de la raíz deniega acceso directo al código y a `.env`.
+Apache tiene un host local en `127.0.0.1:8082` cuyo `DocumentRoot` es la carpeta `public` de este proyecto. El `.htaccess` de la raíz deniega acceso directo al código y a `.env`.
