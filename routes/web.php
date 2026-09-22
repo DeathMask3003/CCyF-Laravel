@@ -10,6 +10,8 @@ use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\FinishedExportController;
 use App\Http\Controllers\NewOfficeController;
 use App\Http\Controllers\OfficeReviewController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\PriceCatalogController;
 use App\Http\Controllers\ServiceTypeController;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +29,11 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/panel', fn () => view('dashboard'))->name('dashboard');
     Route::post('/salir', [AccessController::class, 'destroy'])->name('logout');
+    Route::get('/mi-perfil', [ProfileController::class, 'show'])->name('perfil.show');
+    Route::put('/mi-perfil', [ProfileController::class, 'update'])->name('perfil.update');
+    Route::put('/mi-perfil/contrasena', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('perfil.password');
+    Route::get('/ubicaciones', [LocationController::class, 'index'])->name('ubicaciones.index');
+    Route::post('/ubicaciones', [LocationController::class, 'store'])->middleware('throttle:10,1')->name('ubicaciones.store');
 
     Route::get('/nuevo-oficio', [NewOfficeController::class, 'index'])->name('oficios.index');
     Route::get('/nuevo-oficio/{category}', [NewOfficeController::class, 'show'])->whereNumber('category')->name('oficios.show');

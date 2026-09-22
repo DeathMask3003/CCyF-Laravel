@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#611232">
     <title>@yield('title', 'CCyF') · CoBaEMex</title>
     <link rel="stylesheet" href="{{ asset('css/ccyf.css') }}">
+    @stack('head')
 </head>
 <body>
     <header class="site-header">
@@ -57,7 +58,13 @@
                     @endif
                 </nav>
                 <div class="header-account">
-                    <span title="{{ auth()->user()->usu_area }}">{{ auth()->user()->usu_area }}</span>
+                    <details class="nav-dropdown account-dropdown">
+                        <summary title="{{ auth()->user()->usu_area }}">{{ auth()->user()->usu_area }} <span aria-hidden="true">⌄</span></summary>
+                        <div class="nav-dropdown-menu">
+                            <a href="{{ route('perfil.show') }}" @class(['active' => request()->routeIs('perfil.*')])>Mi perfil</a>
+                            <a href="{{ route('ubicaciones.index') }}" @class(['active' => request()->routeIs('ubicaciones.*')])>Mis ubicaciones</a>
+                        </div>
+                    </details>
                     <form method="post" action="{{ route('logout') }}">@csrf<button class="logout-button" type="submit">Salir</button></form>
                 </div>
             @else
@@ -69,5 +76,6 @@
         @if (session('status')) <div class="flash" role="status">{{ session('status') }}</div> @endif
         @yield('content')
     </main>
+    @stack('scripts')
 </body>
 </html>
