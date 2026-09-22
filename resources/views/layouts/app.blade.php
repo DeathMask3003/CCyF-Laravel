@@ -22,11 +22,15 @@
                 @php($canCampuses = $ccyfMenu->allows(auth()->user(), 'Areas'))
                 @php($canConvocations = $ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
                 @php($canLinks = $ccyfMenu->allows(auth()->user(), 'Subcategorias_widi'))
+                @php($canPending = $ccyfMenu->allows(auth()->user(), 'gestionOficio'))
+                @php($canFinished = $ccyfMenu->allows(auth()->user(), 'buscarOficio') || $canPending || $ccyfMenu->allows(auth()->user(), 'NuevoOficio'))
                 <nav class="main-nav" aria-label="Menú principal">
                     <a href="{{ route('dashboard') }}" @class(['active' => request()->routeIs('dashboard')])>Inicio</a>
                     @if ($ccyfMenu->allows(auth()->user(), 'NuevoOficio') || $canProducts)
                         <a href="{{ route('oficios.index') }}" @class(['active' => request()->routeIs('oficios.*')])>Nuevo registro</a>
                     @endif
+                    @if ($canPending)<a href="{{ route('revision.pending') }}" aria-label="Convocatorias pendientes" @class(['active' => request()->routeIs('revision.pending')])>Pendientes</a>@endif
+                    @if ($canFinished)<a href="{{ route('revision.finished') }}" aria-label="Convocatorias finalizadas" @class(['active' => request()->routeIs('revision.finished', 'revision.historical')])>Finalizadas</a>@endif
                     @if ($canProducts || $canTypes || $canServices || $canCampuses || $canConvocations || $canLinks)
                         <details class="nav-dropdown">
                             <summary @class(['active' => request()->routeIs('catalogos.*', 'tipos.*', 'servicios.*', 'planteles.*', 'convocatorias.*', 'enlaces.*')])>Catálogos <span aria-hidden="true">⌄</span></summary>

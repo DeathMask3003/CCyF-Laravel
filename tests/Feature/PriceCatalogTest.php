@@ -45,6 +45,24 @@ class PriceCatalogTest extends TestCase
             $table->string('num_doc');
             $table->integer('trami_id');
             $table->integer('tipo_id')->nullable();
+            $table->integer('area_id')->nullable();
+            $table->integer('usu_id')->nullable();
+            $table->string('doc_estado')->nullable();
+            $table->string('doc_exter')->nullable();
+            $table->string('doc_respuesta')->nullable();
+            $table->boolean('doc_designado')->default(false);
+            $table->text('doc_descrip')->nullable();
+            $table->dateTime('fech_crea')->nullable();
+            $table->dateTime('fech_concluido')->nullable();
+            $table->date('doc_fech_ini')->nullable();
+            $table->date('doc_fech_fin')->nullable();
+            $table->decimal('monto', 12, 2)->nullable();
+        });
+        Schema::connection('legacy')->create('td_documentov3', function (Blueprint $table): void {
+            $table->increments('det_id');
+            $table->integer('doc_id');
+            $table->integer('est')->default(1);
+            $table->string('prop_escrito')->nullable();
         });
         Schema::connection('legacy')->create('tm_tipo', function (Blueprint $table): void {
             $table->increments('tipo_id');
@@ -111,6 +129,8 @@ class PriceCatalogTest extends TestCase
             ['men_id' => 11, 'men_nom' => 'Areas', 'est' => 1],
             ['men_id' => 16, 'men_nom' => 'Categorias_widi', 'est' => 1],
             ['men_id' => 17, 'men_nom' => 'Subcategorias_widi', 'est' => 1],
+            ['men_id' => 5, 'men_nom' => 'gestionOficio', 'est' => 1],
+            ['men_id' => 6, 'men_nom' => 'buscarOficio', 'est' => 1],
         ]);
         DB::connection('legacy')->table('td_medu_detalle')->insert([
             ['rol_id' => 18, 'men_id' => 16, 'mend_permi' => 'si'],
@@ -118,6 +138,8 @@ class PriceCatalogTest extends TestCase
             ['rol_id' => 18, 'men_id' => 10, 'mend_permi' => 'si'],
             ['rol_id' => 18, 'men_id' => 11, 'mend_permi' => 'si'],
             ['rol_id' => 18, 'men_id' => 17, 'mend_permi' => 'si'],
+            ['rol_id' => 18, 'men_id' => 5, 'mend_permi' => 'si'],
+            ['rol_id' => 18, 'men_id' => 6, 'mend_permi' => 'si'],
             ['rol_id' => 9, 'men_id' => 4, 'mend_permi' => 'si'],
         ]);
         DB::connection('legacy')->table('tm_tipo')->insert([
@@ -479,6 +501,99 @@ class PriceCatalogTest extends TestCase
         ])->all();
         $this->post('/nuevo-oficio/8/registrar', $base)->assertSessionHasErrors('plantel_id');
         $this->assertDatabaseCount('ccyf_registros', 1);
+    }
+
+    public function test_pending_review_requires_permission_and_designation_data(): void
+    {
+        $record = $this->reviewRecord();
+        $this->asUser(2);
+        $this->get('/convocatorias-pendientes')->assertForbidden();
+        $this->post("/expedientes/{$record}/finalizar", [
+            'decision' => 'no_aceptado', 'respuesta' => 'No cumple con los requisitos.',
+        ])->assertForbidden();
+        $this->get("/expedientes/{$record}")->assertOk()->assertSee('CCYF-2026-00001');
+
+        $this->asUser(1);
+        $this->get('/convocatorias-pendientes')->assertOk()->assertSee('CCYF-2026-00001');
+        $this->post("/expedientes/{$record}/finalizar", [
+            'decision' => 'designado', 'respuesta' => 'Se designa al participante.',
+        ])->assertSessionHasErrors(['fecha_inicio', 'fecha_fin', 'monto']);
+        $this->assertDatabaseHas('ccyf_registros', ['id' => $record, 'estado' => 'Recibido']);
+
+        $this->post("/expedientes/{$record}/finalizar", [
+            'decision' => 'designado', 'respuesta' => 'Se designa al participante.',
+            'fecha_inicio' => '2026-10-01', 'fecha_fin' => '2027-09-30', 'monto' => '1200.50',
+        ])->assertRedirect('/convocatorias-finalizadas');
+        $this->assertDatabaseHas('ccyf_registros', [
+            'id' => $record, 'estado' => 'Finalizado', 'decision' => 'designado',
+            'monto' => '1200.5', 'revisado_por' => 1,
+        ]);
+        $this->post("/expedientes/{$record}/finalizar", [
+            'decision' => 'no_aceptado', 'respuesta' => 'Otra respuesta.',
+        ])->assertStatus(409);
+        $this->get('/convocatorias-finalizadas')->assertOk()->assertSee('CCYF-2026-00001');
+    }
+
+    public function test_bulk_rejection_is_atomic_and_historical_result_is_read_only(): void
+    {
+        $record = $this->reviewRecord();
+        $this->asUser(1);
+        $this->post('/convocatorias-pendientes/no-aceptadas', [
+            'registros' => [$record, 9999], 'respuesta' => 'PROPUESTA NO ACEPTADA',
+        ])->assertSessionHasErrors('registros');
+        $this->assertDatabaseHas('ccyf_registros', ['id' => $record, 'estado' => 'Recibido']);
+        $this->post('/convocatorias-pendientes/no-aceptadas', [
+            'registros' => [$record], 'respuesta' => 'PROPUESTA NO ACEPTADA',
+        ])->assertRedirect('/convocatorias-finalizadas');
+        $this->assertDatabaseHas('ccyf_registros', ['id' => $record, 'decision' => 'no_aceptado']);
+
+        DB::connection('legacy')->table('tm_documento')->insert([
+            'doc_id' => 700, 'num_doc' => '8', 'trami_id' => 3, 'tipo_id' => 1,
+            'area_id' => 23, 'usu_id' => 2, 'doc_estado' => 'Finalizado',
+            'doc_exter' => 'Plantel Atlacomulco', 'doc_respuesta' => 'No aceptada.',
+            'fech_crea' => '2026-01-01 10:00:00', 'fech_concluido' => '2026-01-15 10:00:00',
+        ]);
+        $this->get('/convocatorias-finalizadas')->assertOk()->assertSee('HIST-00700');
+        $this->get('/convocatorias-finalizadas/historico/700')->assertOk()->assertSee('No aceptada.');
+        $this->get('/convocatorias-finalizadas?buscar=HIST-00700')->assertOk()->assertSee('HIST-00700');
+        $this->get('/convocatorias-finalizadas?servicio=1')->assertOk()->assertSee('HIST-00700');
+        $this->assertDatabaseCount('ccyf_registros', 1);
+        $this->asUser(2);
+        $this->get('/convocatorias-finalizadas')->assertOk()->assertSee('HIST-00700');
+        $this->get('/convocatorias-finalizadas/historico/700')->assertOk();
+    }
+
+    public function test_historical_pdf_is_served_only_from_its_record(): void
+    {
+        Storage::fake('local');
+        $root = Storage::disk('local')->path('historical');
+        mkdir($root.DIRECTORY_SEPARATOR.'700', 0777, true);
+        file_put_contents($root.DIRECTORY_SEPARATOR.'700'.DIRECTORY_SEPARATOR.'propuesta.pdf', '%PDF-1.4 test');
+        config()->set('ccyf.legacy_files_root', $root);
+        DB::connection('legacy')->table('tm_documento')->insert([
+            'doc_id' => 700, 'num_doc' => '8', 'trami_id' => 3, 'tipo_id' => 1,
+            'usu_id' => 2, 'doc_estado' => 'Finalizado',
+        ]);
+        DB::connection('legacy')->table('td_documentov3')->insert([
+            'doc_id' => 700, 'est' => 1, 'prop_escrito' => 'propuesta.pdf',
+        ]);
+        $this->asUser(1);
+        $this->get('/convocatorias-finalizadas/historico/700/archivo/prop_escrito')->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'attachment; filename=prop_escrito-700.pdf');
+        $this->get('/convocatorias-finalizadas/historico/700/archivo/acta_nac')->assertNotFound();
+    }
+
+    private function reviewRecord(): int
+    {
+        $catalog = app(PriceCatalogs::class)->prepare(8);
+        return DB::table('ccyf_registros')->insertGetId([
+            'folio' => 'CCYF-2026-00001', 'convocatoria_id' => 8, 'catalogo_id' => $catalog,
+            'servicio_id' => 1, 'plantel_id' => 23, 'tipo_documento_id' => 1,
+            'usu_id' => 2, 'solicitante' => 'Concursante', 'dirigido_a' => 'Dirección',
+            'comentarios' => 'Propuesta de prueba', 'estado' => 'Recibido',
+            'enviado_at' => '2026-09-22 12:00:00', 'created_at' => now(), 'updated_at' => now(),
+        ]);
     }
 
     private function asUser(int $id): void

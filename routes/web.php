@@ -6,6 +6,7 @@ use App\Http\Controllers\ConvocationController;
 use App\Http\Controllers\ConvocationLinkController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\NewOfficeController;
+use App\Http\Controllers\OfficeReviewController;
 use App\Http\Controllers\PriceCatalogController;
 use App\Http\Controllers\ServiceTypeController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,15 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/nuevo-oficio/{category}/precios', [NewOfficeController::class, 'save'])->whereNumber('category')->name('oficios.save');
     Route::post('/nuevo-oficio/{category}/registrar', [NewOfficeController::class, 'submit'])->whereNumber('category')->name('oficios.submit');
     Route::get('/nuevo-oficio/registros/{record}', [NewOfficeController::class, 'receipt'])->whereNumber('record')->name('oficios.receipt');
+
+    Route::get('/convocatorias-pendientes', [OfficeReviewController::class, 'pending'])->name('revision.pending');
+    Route::post('/convocatorias-pendientes/no-aceptadas', [OfficeReviewController::class, 'rejectBulk'])->name('revision.reject-bulk');
+    Route::get('/convocatorias-finalizadas', [OfficeReviewController::class, 'finished'])->name('revision.finished');
+    Route::get('/expedientes/{record}', [OfficeReviewController::class, 'show'])->whereNumber('record')->name('revision.show');
+    Route::post('/expedientes/{record}/finalizar', [OfficeReviewController::class, 'finish'])->whereNumber('record')->name('revision.finish');
+    Route::get('/expedientes/{record}/archivos/{file}', [OfficeReviewController::class, 'file'])->whereNumber(['record', 'file'])->name('revision.file');
+    Route::get('/convocatorias-finalizadas/historico/{record}', [OfficeReviewController::class, 'historical'])->whereNumber('record')->name('revision.historical');
+    Route::get('/convocatorias-finalizadas/historico/{record}/archivo/{key}', [OfficeReviewController::class, 'historicalFile'])->whereNumber('record')->name('revision.historical-file');
 
     Route::get('/catalogos', [PriceCatalogController::class, 'index'])->name('catalogos.index');
     Route::get('/catalogos/{category}', [PriceCatalogController::class, 'show'])->whereNumber('category')->name('catalogos.show');
