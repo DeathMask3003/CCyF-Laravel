@@ -46,7 +46,7 @@ class FinishedRecords
             'plantel.area_nom as plantel_real',
         ]);
 
-        $contacts = DB::connection('legacy')->table('tm_usuario')
+        $contacts = DB::table('ccyf_usuarios')
             ->whereIn('usu_id', $localRows->pluck('usu_id')->unique()->all())
             ->get(['usu_id', 'usu_correo', 'usu_telf'])->keyBy('usu_id');
         $services = DB::table('ccyf_tipos_servicio')->whereNotNull('legacy_trami_id')

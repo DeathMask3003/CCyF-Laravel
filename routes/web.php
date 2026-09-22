@@ -4,6 +4,8 @@ use App\Http\Controllers\Auth\AccessController;
 use App\Http\Controllers\CampusController;
 use App\Http\Controllers\ConvocationController;
 use App\Http\Controllers\ConvocationLinkController;
+use App\Http\Controllers\CcyfRoleController;
+use App\Http\Controllers\CcyfUserController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\FinishedExportController;
 use App\Http\Controllers\NewOfficeController;
@@ -22,7 +24,7 @@ Route::middleware('guest')->group(function (): void {
     Route::post('/verificacion/reenviar', [AccessController::class, 'resend'])->middleware('throttle:2,1')->name('mfa.resend');
 });
 
-Route::middleware('auth')->group(function (): void {
+Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/panel', fn () => view('dashboard'))->name('dashboard');
     Route::post('/salir', [AccessController::class, 'destroy'])->name('logout');
 
@@ -76,4 +78,18 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/enlaces-convocatoria', [ConvocationLinkController::class, 'index'])->name('enlaces.index');
     Route::get('/enlaces-convocatoria/{convocation}/editar', [ConvocationLinkController::class, 'edit'])->whereNumber('convocation')->name('enlaces.edit');
     Route::put('/enlaces-convocatoria/{convocation}', [ConvocationLinkController::class, 'update'])->whereNumber('convocation')->name('enlaces.update');
+
+    Route::get('/usuarios', [CcyfUserController::class, 'index'])->name('usuarios.index');
+    Route::get('/usuarios/nuevo', [CcyfUserController::class, 'create'])->name('usuarios.create');
+    Route::post('/usuarios', [CcyfUserController::class, 'store'])->name('usuarios.store');
+    Route::get('/usuarios/{user}/editar', [CcyfUserController::class, 'edit'])->whereNumber('user')->name('usuarios.edit');
+    Route::put('/usuarios/{user}', [CcyfUserController::class, 'update'])->whereNumber('user')->name('usuarios.update');
+    Route::patch('/usuarios/{user}/estado', [CcyfUserController::class, 'toggle'])->whereNumber('user')->name('usuarios.toggle');
+
+    Route::get('/roles', [CcyfRoleController::class, 'index'])->name('roles.index');
+    Route::get('/roles/nuevo', [CcyfRoleController::class, 'create'])->name('roles.create');
+    Route::post('/roles', [CcyfRoleController::class, 'store'])->name('roles.store');
+    Route::get('/roles/{role}/editar', [CcyfRoleController::class, 'edit'])->whereNumber('role')->name('roles.edit');
+    Route::put('/roles/{role}', [CcyfRoleController::class, 'update'])->whereNumber('role')->name('roles.update');
+    Route::patch('/roles/{role}/estado', [CcyfRoleController::class, 'toggle'])->whereNumber('role')->name('roles.toggle');
 });

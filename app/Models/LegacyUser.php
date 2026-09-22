@@ -6,13 +6,13 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class LegacyUser extends Authenticatable
 {
-    protected $connection = 'legacy';
+    protected $connection = 'sqlite';
 
-    protected $table = 'tm_usuario';
+    protected $table = 'ccyf_usuarios';
 
     protected $primaryKey = 'usu_id';
 
-    public $timestamps = false;
+    public $timestamps = true;
 
     protected $guarded = ['*'];
 

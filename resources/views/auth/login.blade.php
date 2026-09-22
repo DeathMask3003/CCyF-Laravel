@@ -11,7 +11,7 @@
     <form method="post" action="{{ route('login.store') }}">
         @csrf
         <label for="email">Correo electrónico</label>
-        <input id="email" name="email" type="email" maxlength="50" autocomplete="username" value="{{ old('email') }}" required autofocus>
+        <input id="email" name="email" type="email" maxlength="150" autocomplete="username" value="{{ old('email') }}" required autofocus>
         @error('email') <p class="error" role="alert">{{ $message }}</p> @enderror
 
         <label for="password">Contraseña</label>

@@ -11,7 +11,7 @@ Se migrarán únicamente los flujos propios de CCyF: acceso y roles necesarios, 
 - `ccyf.sql` contiene datos personales y credenciales cifradas. Permanece fuera del repositorio Laravel.
 - La carpeta heredada permanece sin cambios.
 - No ejecutar migraciones de Laravel sobre la base `ccyf` existente. La conexión `legacy` usa una cuenta local limitada a `SELECT` durante esta fase.
-- Antes de probar escrituras, restaurar una copia aislada con nombre propio y configurar credenciales específicas para ella.
+- Las nuevas escrituras de CCyF van a la base SQLite local. La base heredada se consulta sin modificarla.
 - Conservar archivos adjuntos y PDFs heredados fuera de `public`; exponerlos después mediante rutas autorizadas por usuario y rol.
 - Apache está configurado para `http://localhost:8082` y apunta exclusivamente a `D:\wamp64\www\ccyf-laravel\public`. La raíz del proyecto contiene un `.htaccess` que niega acceso web directo, incluido `.env`.
 
@@ -30,7 +30,9 @@ La opción `--check-db` consulta únicamente la existencia de tablas cuando `LEG
 - Laravel 12.69.2 instalado y conexión local al esquema de 84 tablas comprobada.
 - Inicio de sesión compatible con contraseñas heredadas, seguido de un código por correo. La sesión autenticada comienza únicamente después del código; hay vencimiento y límite de intentos.
 - El correo local usa `MAIL_MAILER=log`, por lo que no se envían mensajes reales durante las pruebas actuales.
-- El panel inicial permite validar el acceso. Los módulos de negocio aún no están disponibles en Laravel.
+- Ya se migraron catálogos, planteles, convocatorias, nuevo registro, propuestas pendientes y finalizadas, y exportaciones PDF/Excel de resultados.
+- `USUARIOS` y `ROL` se migraron a Gestión de usuarios y Gestión de roles. La importación inicial conserva los ID, contraseñas y permisos de CCyF; las altas y ediciones posteriores viven solo en SQLite. Los permisos ajenos al concurso no se exponen.
+- Ejecutar `php artisan migrate --force` y luego `php artisan ccyf:import-identity` una vez en cada instalación. El importador no sobrescribe cambios si las cuentas locales ya existen.
 - Las pruebas automatizadas usan una base SQLite ficticia y no alteran la copia `ccyf`.
 
 ## Orden de trabajo

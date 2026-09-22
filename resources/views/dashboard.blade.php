@@ -35,5 +35,11 @@
     @if ($ccyfMenu->allows(auth()->user(), 'buscarOficio') || $ccyfMenu->allows(auth()->user(), 'gestionOficio') || $ccyfMenu->allows(auth()->user(), 'NuevoOficio'))
         <article class="feature-card"><span class="feature-icon">09</span><h2>Convocatorias finalizadas</h2><p>Consulta resultados y expedientes actuales e históricos de CCyF.</p><a class="text-link" href="{{ route('revision.finished') }}">Ver resultados <span aria-hidden="true">→</span></a></article>
     @endif
+    @if ($ccyfMenu->allows(auth()->user(), 'Usuarios'))
+        <article class="feature-card"><span class="feature-icon">10</span><h2>Gestión de usuarios</h2><p>Administra cuentas, roles asignados y acceso al sistema.</p><a class="text-link" href="{{ route('usuarios.index') }}">Administrar usuarios <span aria-hidden="true">→</span></a></article>
+    @endif
+    @if ($ccyfMenu->allows(auth()->user(), 'Rol'))
+        <article class="feature-card"><span class="feature-icon">11</span><h2>Gestión de roles</h2><p>Define los permisos de los módulos de CCyF para cada rol.</p><a class="text-link" href="{{ route('roles.index') }}">Administrar roles <span aria-hidden="true">→</span></a></article>
+    @endif
 </div>
 @endsection

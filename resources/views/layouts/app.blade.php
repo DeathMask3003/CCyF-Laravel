@@ -24,6 +24,8 @@
                 @php($canLinks = $ccyfMenu->allows(auth()->user(), 'Subcategorias_widi'))
                 @php($canPending = $ccyfMenu->allows(auth()->user(), 'gestionOficio'))
                 @php($canFinished = $ccyfMenu->allows(auth()->user(), 'buscarOficio') || $canPending || $ccyfMenu->allows(auth()->user(), 'NuevoOficio'))
+                @php($canUsers = $ccyfMenu->allows(auth()->user(), 'Usuarios'))
+                @php($canRoles = $ccyfMenu->allows(auth()->user(), 'Rol'))
                 <nav class="main-nav" aria-label="Menú principal">
                     <a href="{{ route('dashboard') }}" @class(['active' => request()->routeIs('dashboard')])>Inicio</a>
                     @if ($ccyfMenu->allows(auth()->user(), 'NuevoOficio') || $canProducts)
@@ -41,6 +43,15 @@
                                 @if ($canProducts)<a href="{{ route('catalogos.index') }}" @class(['active' => request()->routeIs('catalogos.*')])>Productos y precios</a>@endif
                                 @if ($canTypes)<a href="{{ route('tipos.index') }}" @class(['active' => request()->routeIs('tipos.*')])>Tipo de documento</a>@endif
                                 @if ($canServices)<a href="{{ route('servicios.index') }}" @class(['active' => request()->routeIs('servicios.*')])>Tipos de servicios</a>@endif
+                            </div>
+                        </details>
+                    @endif
+                    @if ($canUsers || $canRoles)
+                        <details class="nav-dropdown">
+                            <summary @class(['active' => request()->routeIs('usuarios.*', 'roles.*')])>Administración <span aria-hidden="true">⌄</span></summary>
+                            <div class="nav-dropdown-menu">
+                                @if ($canUsers)<a href="{{ route('usuarios.index') }}" @class(['active' => request()->routeIs('usuarios.*')])>Gestión de usuarios</a>@endif
+                                @if ($canRoles)<a href="{{ route('roles.index') }}" @class(['active' => request()->routeIs('roles.*')])>Gestión de roles</a>@endif
                             </div>
                         </details>
                     @endif

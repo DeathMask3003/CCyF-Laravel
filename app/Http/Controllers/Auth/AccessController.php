@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\LegacyUser;
+use App\Services\LegacyMenu;
 use App\Services\LegacyPasswordVerifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,16 +20,16 @@ class AccessController extends Controller
         return view('auth.login');
     }
 
-    public function store(Request $request, LegacyPasswordVerifier $passwords): RedirectResponse
+    public function store(Request $request, LegacyPasswordVerifier $passwords, LegacyMenu $menu): RedirectResponse
     {
         $credentials = $request->validate([
-            'email' => ['required', 'email', 'max:50'],
+            'email' => ['required', 'email', 'max:150'],
             'password' => ['required', 'string', 'max:255'],
         ]);
 
         try {
             $user = LegacyUser::query()
-                ->where('usu_correo', trim($credentials['email']))
+                ->whereRaw('LOWER(usu_correo) = ?', [mb_strtolower(trim($credentials['email']))])
                 ->where('est', 1)
                 ->first();
         } catch (Throwable $exception) {
@@ -37,7 +38,7 @@ class AccessController extends Controller
             return back()->withErrors(['email' => 'El acceso aún no está disponible.'])->onlyInput('email');
         }
 
-        if (! $user || ! $passwords->verify($credentials['password'], $user->getAuthPassword())) {
+        if (! $user || ! $menu->roleActive($user) || ! $passwords->verify($credentials['password'], $user->getAuthPassword())) {
             return back()->withErrors(['email' => 'El correo o la contraseña no son correctos.'])->onlyInput('email');
         }
 
@@ -63,7 +64,7 @@ class AccessController extends Controller
         return view('auth.challenge');
     }
 
-    public function verify(Request $request): RedirectResponse
+    public function verify(Request $request, LegacyMenu $menu): RedirectResponse
     {
         $input = $request->validate(['code' => ['required', 'digits:6']]);
 
@@ -99,7 +100,7 @@ class AccessController extends Controller
 
         $this->clearPending($request);
 
-        if (! $user) {
+        if (! $user || ! $menu->roleActive($user)) {
             return redirect()->route('login')->withErrors(['email' => 'La cuenta no está disponible.']);
         }
 
@@ -109,7 +110,7 @@ class AccessController extends Controller
         return redirect()->intended(route('dashboard'));
     }
 
-    public function resend(Request $request): RedirectResponse
+    public function resend(Request $request, LegacyMenu $menu): RedirectResponse
     {
         if (! $this->hasPending($request)) {
             return redirect()->route('login');
@@ -125,7 +126,7 @@ class AccessController extends Controller
             $user = null;
         }
 
-        if (! $user || ! $this->sendCode($request, $user)) {
+        if (! $user || ! $menu->roleActive($user) || ! $this->sendCode($request, $user)) {
             return back()->withErrors(['code' => 'No se pudo reenviar el código.']);
         }
 

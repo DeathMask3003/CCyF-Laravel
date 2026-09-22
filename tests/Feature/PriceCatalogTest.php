@@ -119,6 +119,10 @@ class PriceCatalogTest extends TestCase
             ['usu_id' => 1, 'usu_area' => 'Administración', 'usu_correo' => 'admin@example.test', 'usu_telf' => '7220000001', 'rol_id' => 18, 'usu_pass' => 'x'],
             ['usu_id' => 2, 'usu_area' => 'Concursante', 'usu_correo' => 'persona@example.test', 'usu_telf' => '7220000002', 'rol_id' => 9, 'usu_pass' => 'x'],
         ]);
+        DB::table('ccyf_usuarios')->insert([
+            ['usu_id' => 1, 'legacy_usu_id' => 1, 'usu_area' => 'Administración', 'usu_correo' => 'admin@example.test', 'usu_telf' => '7220000001', 'rol_id' => 18, 'usu_pass' => 'x', 'est' => 1],
+            ['usu_id' => 2, 'legacy_usu_id' => 2, 'usu_area' => 'Concursante', 'usu_correo' => 'persona@example.test', 'usu_telf' => '7220000002', 'rol_id' => 9, 'usu_pass' => 'x', 'est' => 1],
+        ]);
         DB::connection('legacy')->table('tm_categoria_widi')->insert([
             ['cat_id' => 2, 'cat_nom' => 'SEPTIMA', 'est' => 0],
             ['cat_id' => 8, 'cat_nom' => 'Convocatoria de Cafetería', 'est' => 1],
