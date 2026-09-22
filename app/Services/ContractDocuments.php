@@ -11,6 +11,12 @@ use NumberFormatter;
 
 class ContractDocuments
 {
+    public const FONT_FAMILIES = [
+        'dejavusans' => 'DejaVu Sans',
+        'dejavuserif' => 'DejaVu Serif',
+        'freesans' => 'FreeSans',
+    ];
+
     private array $templateCache = [];
     private array $priceCache = [];
 
@@ -36,6 +42,7 @@ class ContractDocuments
         if ($local) return $this->templateCache[$serviceId] = (object) ['id' => $local->id, 'body' => $local->body, 'source' => 'local',
             'institution_signer' => $local->institution_signer, 'institution_role' => $local->institution_role,
             'witness_signer' => $local->witness_signer, 'witness_role' => $local->witness_role,
+            'font_family' => $local->font_family, 'font_size' => (float) $local->font_size,
             'updated_at' => $local->updated_at];
 
         $legacy = DB::connection('legacy')->table('tm_plantilla_contrato')
@@ -44,6 +51,7 @@ class ContractDocuments
         return $this->templateCache[$serviceId] = (object) ['id' => null, 'body' => $legacy->plantilla_body, 'source' => 'historica',
             'institution_signer' => null, 'institution_role' => null,
             'witness_signer' => null, 'witness_role' => null,
+            'font_family' => 'dejavusans', 'font_size' => 9.0,
             'updated_at' => $legacy->fech_modif ?: $legacy->fech_crea];
     }
 
@@ -53,6 +61,9 @@ class ContractDocuments
         if (! $template) return ['Plantilla de contrato'];
         $issues = [];
         if ($template->source !== 'local') $issues[] = 'Revisión jurídica de la plantilla histórica';
+        if (! array_key_exists($template->font_family, self::FONT_FAMILIES)) {
+            $issues[] = 'Fuente de contrato no disponible en este servidor';
+        }
         if ($template->source === 'local') {
             foreach (['institution_signer', 'institution_role', 'witness_signer', 'witness_role'] as $field) {
                 if (! trim((string) $template->{$field})) $issues[] = 'Datos de firmantes';
@@ -86,36 +97,42 @@ class ContractDocuments
         $html = $this->editorHtml((string) $template->body);
         $replacements = [];
         foreach ($values as $key => $value) {
-            $replacements['{'.$key.'}'] = e($value);
+            $replacements['{'.$key.'}'] = ' '.e($value).' ';
         }
         $replacements['{tabla_precios}'] = $this->priceTableHtml($row);
         $html = strtr($html, $replacements);
+        $html = preg_replace('/(?:&nbsp;|\x{00A0})+/u', ' ', $html) ?? $html;
+        abort_unless(array_key_exists($template->font_family, self::FONT_FAMILIES), 422,
+            'La fuente de esta plantilla no está disponible en el servidor.');
+        $family = $template->font_family;
+        $size = min(14, max(7, (float) $template->font_size));
         $html = '<!doctype html><html lang="es"><head><meta charset="UTF-8"><style>
             @page { margin: 21mm 19mm 22mm; }
-            body { font-family: dejavusans, sans-serif; color:#202020; font-size:9pt; line-height:1.4; }
-            p { margin:0 0 7px; text-align:justify; } h1,h2,h3 { margin:0 0 9px; text-align:center; }
+            body { font-family: '.$family.'; color:#202020; font-size:'.$size.'pt; line-height:1.4; }
+            p { margin:0 0 7px; text-align:left; } h1,h2,h3 { margin:0 0 9px; text-align:center; }
             table { width:100%; border-collapse:collapse; } td,th { vertical-align:top; padding:3px; }
             .prices td,.prices th { border:1px solid #bbb; padding:6px; } .prices th { background:#f1ecee; }
             img { max-width:170mm; height:auto; } .draft { color:#8d2d49; font-weight:bold;
                 border:1px solid #d9b3bf; padding:7px 12px; margin-bottom:15px; text-align:center; }
             .signatures { margin-top:26px; page-break-inside:avoid; width:100%; }
             .signatures td { width:50%; text-align:center; padding:28px 10px 0; }
+            .witness-signature { width:47%; margin:34px 0 0 53%; text-align:center; page-break-inside:avoid; }
             .line { border-top:1px solid #333; padding-top:6px; font-weight:bold; }
             </style></head><body>'
             .($draft ? '<div class="draft">BORRADOR PARA REVISIÓN · No enviar ni firmar</div>' : '')
             .$html.'<table class="signatures"><tr><td><div class="line">'
-            .e(mb_strtoupper((string) ($template->institution_signer ?: 'FIRMA DEL COBAEM')))
+            .e((string) ($template->institution_signer ?: 'FIRMA DEL COBAEM'))
             .'<br>'.e((string) ($template->institution_role ?: 'POR EL COBAEM')).'</div></td>'
-            .'<td><div class="line">'.e(mb_strtoupper((string) $row->name)).'<br>PERMISIONARIO</div></td></tr></table>'
-            .'<table class="signatures"><tr><td></td><td><div class="line">'
-            .e(mb_strtoupper((string) ($template->witness_signer ?: 'FIRMA DEL TESTIGO')))
-            .'<br>'.e((string) ($template->witness_role ?: 'TESTIGO')).'</div></td></tr></table>'
+            .'<td><div class="line">'.e((string) $row->name).'<br>PERMISIONARIO</div></td></tr></table>'
+            .'<div class="witness-signature"><div class="line">'
+            .e((string) ($template->witness_signer ?: 'FIRMA DEL TESTIGO'))
+            .'<br>'.e((string) ($template->witness_role ?: 'TESTIGO')).'</div></div>'
             .'</body></html>';
 
         $directory = storage_path('app/mpdf');
         if (! is_dir($directory)) mkdir($directory, 0775, true);
         $pdf = new Mpdf(['mode' => 'utf-8', 'format' => 'Letter', 'tempDir' => $directory,
-            'default_font' => 'dejavusans']);
+            'default_font' => $family, 'default_font_size' => $size]);
         $pdf->showImageErrors = false;
         $pdf->WriteHTML($html);
         return $pdf->Output('', 'S');
@@ -128,8 +145,8 @@ class ContractDocuments
         $cents = (int) round(($amount - floor($amount)) * 100);
         $today = now()->locale('es')->isoFormat('D [de] MMMM [de] YYYY');
         $values = [
-            'permisionario' => mb_strtoupper((string) $row->name),
-            'plantel' => mb_strtoupper((string) $row->campus),
+            'permisionario' => (string) $row->name,
+            'plantel' => (string) $row->campus,
             'direccion_plantel' => (string) $row->campus_address,
             'correo' => (string) $row->email, 'telefono' => (string) $row->phone,
             'servicio' => $row->service === 'cafeteria' ? 'Cafetería' : 'Centro de Fotocopiado',

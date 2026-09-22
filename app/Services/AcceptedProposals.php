@@ -82,9 +82,14 @@ class AcceptedProposals
         return $historical->concat($current)->map(function ($row) use ($deliveries, $terms): object {
             $row->terms = $terms->get($row->key);
             if ($row->terms) {
-                foreach (['amount','starts','ends','campus_address','email','phone','address','ine','alternate','alternate_phone'] as $field) {
+                foreach (['name','amount','starts','ends','campus_address','email','phone','address','ine','alternate','alternate_phone'] as $field) {
                     if ($row->terms->{$field} !== null) $row->{$field} = $row->terms->{$field};
                 }
+            }
+            $row->name = ContractText::personName($row->name);
+            $row->alternate = ContractText::personName($row->alternate);
+            foreach (['campus', 'campus_address', 'address'] as $field) {
+                $row->{$field} = ContractText::readable($row->{$field});
             }
             $row->delivery = $deliveries->get($row->key);
             $row->sent_at = $row->legacy_sent_at ?: $row->delivery?->sent_at;

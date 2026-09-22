@@ -108,7 +108,8 @@ class AcceptedProposalTest extends TestCase
         $this->assertStringStartsWith('%PDF', $preview->getContent());
         $body = '<h1>Contrato revisado</h1><p>{permisionario} prestará el servicio en {plantel} por una aportación mensual de {monto}, desde {fecha_ini} hasta {fecha_fin}.</p>';
         $this->post('/contratos-permisionarios/plantilla/cafeteria', $this->reviewedTemplate($body))->assertRedirect();
-        $this->assertDatabaseHas('ccyf_contract_templates', ['legacy_trami_id'=>3,'body'=>$body,'edited_by'=>2]);
+        $this->assertDatabaseHas('ccyf_contract_templates', ['legacy_trami_id'=>3,'body'=>$body,'edited_by'=>2,
+            'font_family'=>'dejavusans','font_size'=>9]);
         $this->assertStringContainsString('CONTRATO', DB::connection('legacy')->table('tm_plantilla_contrato')->value('plantilla_body'));
         $version = DB::table('ccyf_contract_templates')->value('id');
         $this->get('/contratos-permisionarios/plantilla/cafeteria?version='.$version)->assertOk()
@@ -154,6 +155,43 @@ class AcceptedProposalTest extends TestCase
         $this->put('/contratos-permisionarios/historico-82/datos', [
             'starts'=>'2027-04-01','ends'=>'2026-04-01',
         ])->assertSessionHasErrors('ends');
+    }
+
+    public function test_uppercase_name_is_readable_and_accents_can_be_corrected_only_for_the_contract(): void
+    {
+        DB::connection('legacy')->table('tm_usuario')->where('usu_id', 7)->update([
+            'usu_area'=>'JUAN LOPEZ PEREZ', 'direcc'=>'CALLE COBAEM 12',
+        ]);
+        $this->be(LegacyUser::findOrFail(2));
+        $this->get('/contratos-permisionarios/historico-80')->assertOk()
+            ->assertSee('Juan Lopez Perez')->assertSee('Calle COBAEM 12');
+
+        $this->put('/contratos-permisionarios/historico-80/datos', [
+            'name'=>'JUAN LÓPEZ PÉREZ', 'address'=>'Calle López Mateos 12',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ccyf_contract_terms', [
+            'origin'=>'historico', 'registration_id'=>80, 'name'=>'Juan López Pérez',
+        ]);
+        $this->assertSame('JUAN LOPEZ PEREZ', DB::connection('legacy')->table('tm_usuario')->where('usu_id', 7)->value('usu_area'));
+        $this->get('/contratos-permisionarios/historico-80')->assertOk()
+            ->assertSee('Juan López Pérez')->assertSee('Calle López Mateos 12');
+        $row = app(AcceptedProposals::class)->find('historico-80');
+        $this->assertSame('Juan López Pérez', app(ContractDocuments::class)->values($row)['permisionario']);
+    }
+
+    public function test_editor_saves_valid_type_size_and_rejects_invalid_values(): void
+    {
+        $this->be(LegacyUser::findOrFail(2));
+        $body = '<p>{permisionario} en {plantel} por {monto} de {fecha_ini} a {fecha_fin}. Contrato con contenido suficiente.</p>';
+        $data = $this->reviewedTemplate($body);
+        $data['font_family'] = 'dejavuserif';
+        $data['font_size'] = '10.5';
+        $this->post('/contratos-permisionarios/plantilla/cafeteria', $data)->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ccyf_contract_templates', ['font_family'=>'dejavuserif', 'font_size'=>10.5]);
+        $this->get('/contratos-permisionarios/historico-80/borrador')->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+        $data['font_size'] = '20';
+        $this->post('/contratos-permisionarios/plantilla/cafeteria', $data)->assertSessionHasErrors('font_size');
     }
 
     public function test_historical_sent_flag_blocks_changes_even_without_a_date(): void
@@ -207,6 +245,7 @@ class AcceptedProposalTest extends TestCase
     private function reviewedTemplate(string $body): array
     {
         return ['body'=>$body,'confirmacion'=>'1',
+            'font_family'=>'dejavusans','font_size'=>9,
             'institution_signer'=>'Representante Institucional','institution_role'=>'Apoderado legal',
             'witness_signer'=>'Testigo Institucional','witness_role'=>'Jefatura de departamento'];
     }

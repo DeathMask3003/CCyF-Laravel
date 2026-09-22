@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\AcceptedProposals;
 use App\Services\ContractDocuments;
+use App\Services\ContractText;
 use App\Services\LegacyMenu;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -85,6 +86,7 @@ class AcceptedProposalController extends Controller
         $row = $this->record($proposals, $key);
         abort_if($row->sent || $row->delivery, 409, 'El contrato ya fue enviado o requiere revisión.');
         $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:180'],
             'amount' => ['nullable', 'numeric', 'between:0.01,9999999999.99'],
             'starts' => ['nullable', 'date'], 'ends' => ['nullable', 'date'],
             'campus_address' => ['nullable', 'string', 'max:500'],
@@ -100,7 +102,11 @@ class AcceptedProposalController extends Controller
         if ($starts && $ends && strtotime($ends) <= strtotime($starts)) {
             throw ValidationException::withMessages(['ends' => 'El fin de vigencia debe ser posterior al inicio.']);
         }
+        if (array_key_exists('name', $data)) {
+            $data['name'] = ContractText::personName($data['name']);
+        }
         DB::table('ccyf_contract_terms')->insert(['origin' => $row->origin, 'registration_id' => $row->id,
+            'name' => $data['name'] ?? null,
             'amount' => $data['amount'] ?? null, 'starts' => $data['starts'] ?? null,
             'ends' => $data['ends'] ?? null, 'campus_address' => $data['campus_address'] ?? null,
             'email' => $data['email'] ?? null, 'phone' => $data['phone'] ?? null,
@@ -153,6 +159,7 @@ class AcceptedProposalController extends Controller
         return view('contratos.template', ['service' => $service, 'current' => $current,
             'editor' => $editor, 'viewingVersion' => $viewingVersion,
             'versions' => $versions, 'variables' => ContractDocuments::VARIABLES,
+            'fontFamilies' => ContractDocuments::FONT_FAMILIES,
             'editorHtml' => $contracts->editorHtml((string) old('body', $editor?->body ?? ''))]);
     }
 
@@ -161,6 +168,8 @@ class AcceptedProposalController extends Controller
         $this->authorizeModule($request, $menu);
         $serviceId = $this->serviceId($service);
         $data = $request->validate(['body' => ['required', 'string', 'min:100', 'max:700000'],
+            'font_family' => ['required', Rule::in(array_keys(ContractDocuments::FONT_FAMILIES))],
+            'font_size' => ['required', 'numeric', 'between:7,14', 'multiple_of:0.5'],
             'institution_signer' => ['required', 'string', 'max:180'],
             'institution_role' => ['required', 'string', 'max:180'],
             'witness_signer' => ['required', 'string', 'max:180'],
@@ -177,6 +186,7 @@ class AcceptedProposalController extends Controller
         }
         DB::table('ccyf_contract_templates')->insert([
             'legacy_trami_id' => $serviceId, 'body' => $data['body'],
+            'font_family' => $data['font_family'], 'font_size' => $data['font_size'],
             'institution_signer' => $data['institution_signer'], 'institution_role' => $data['institution_role'],
             'witness_signer' => $data['witness_signer'], 'witness_role' => $data['witness_role'],
             'edited_by' => $request->user()->getKey(), 'created_at' => now(), 'updated_at' => now(),
