@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Auth\AccessController;
+use App\Http\Controllers\CampusController;
+use App\Http\Controllers\ConvocationController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\NewOfficeController;
 use App\Http\Controllers\PriceCatalogController;
@@ -40,4 +42,18 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/tipos-servicios', [ServiceTypeController::class, 'store'])->name('servicios.store');
     Route::put('/tipos-servicios/{service}', [ServiceTypeController::class, 'update'])->whereNumber('service')->name('servicios.update');
     Route::patch('/tipos-servicios/{service}/estado', [ServiceTypeController::class, 'toggle'])->whereNumber('service')->name('servicios.toggle');
+
+    Route::get('/planteles', [CampusController::class, 'index'])->name('planteles.index');
+    Route::get('/planteles/nuevo', [CampusController::class, 'create'])->name('planteles.create');
+    Route::post('/planteles', [CampusController::class, 'store'])->name('planteles.store');
+    Route::get('/planteles/{campus}/editar', [CampusController::class, 'edit'])->whereNumber('campus')->name('planteles.edit');
+    Route::put('/planteles/{campus}', [CampusController::class, 'update'])->whereNumber('campus')->name('planteles.update');
+    Route::patch('/planteles/{campus}/estado', [CampusController::class, 'toggle'])->whereNumber('campus')->name('planteles.toggle');
+
+    Route::get('/convocatorias', [ConvocationController::class, 'index'])->name('convocatorias.index');
+    Route::get('/convocatorias/nueva', [ConvocationController::class, 'create'])->name('convocatorias.create');
+    Route::post('/convocatorias', [ConvocationController::class, 'store'])->name('convocatorias.store');
+    Route::get('/convocatorias/{convocation}/editar', [ConvocationController::class, 'edit'])->whereNumber('convocation')->name('convocatorias.edit');
+    Route::put('/convocatorias/{convocation}', [ConvocationController::class, 'update'])->whereNumber('convocation')->name('convocatorias.update');
+    Route::patch('/convocatorias/{convocation}/estado', [ConvocationController::class, 'toggle'])->whereNumber('convocation')->name('convocatorias.toggle');
 });

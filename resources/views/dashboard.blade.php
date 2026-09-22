@@ -20,5 +20,11 @@
     @if ($ccyfMenu->allows(auth()->user(), 'Asuntos'))
         <article class="feature-card"><span class="feature-icon">04</span><h2>Tipos de servicios</h2><p>Administra los servicios de las convocatorias y su descripción para los nuevos registros.</p><a class="text-link" href="{{ route('servicios.index') }}">Administrar servicios <span aria-hidden="true">→</span></a></article>
     @endif
+    @if ($ccyfMenu->allows(auth()->user(), 'Areas'))
+        <article class="feature-card"><span class="feature-icon">05</span><h2>Gestionar planteles</h2><p>Actualiza los planteles participantes y sus condiciones para cada tipo de servicio.</p><a class="text-link" href="{{ route('planteles.index') }}">Administrar planteles <span aria-hidden="true">→</span></a></article>
+    @endif
+    @if ($ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
+        <article class="feature-card"><span class="feature-icon">06</span><h2>Número de convocatoria</h2><p>Define el servicio y los planteles participantes de cada convocatoria.</p><a class="text-link" href="{{ route('convocatorias.index') }}">Administrar convocatorias <span aria-hidden="true">→</span></a></article>
+    @endif
 </div>
 @endsection

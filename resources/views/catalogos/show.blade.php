@@ -9,8 +9,8 @@
 @if (! $catalog)
     <section class="panel narrow-panel"><span class="eyebrow">Paso inicial</span><h2>Preparar catálogo</h2><p class="muted">Empezaremos con los productos que ya utiliza CCyF. Podrás modificar, agregar o retirar cualquiera de ellos.</p>
         <form method="post" action="{{ route('catalogos.prepare', $legacy->cat_id) }}">@csrf
-            <label for="servicio">Tipo de servicio de esta convocatoria</label>
-            <select id="servicio" name="servicio_id" required><option value="">Selecciona el servicio</option>@foreach ($services as $service)<option value="{{ $service->id }}" @selected((string) old('servicio_id', $suggestedServiceId) === (string) $service->id)>{{ $service->nombre }}</option>@endforeach</select>
+            <label>Tipo de servicio de esta convocatoria</label>
+            <div class="readonly-value">{{ $service->nombre }}</div>
             <button class="button" type="submit">Crear catálogo</button>
         </form>
     </section>

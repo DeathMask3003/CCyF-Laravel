@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\LegacyUser;
 use App\Services\DocumentTypes;
+use App\Services\CcyfStructure;
 use App\Services\PriceCatalogs;
 use App\Services\ServiceTypes;
 use Illuminate\Database\Schema\Blueprint;
@@ -33,6 +34,8 @@ class PriceCatalogTest extends TestCase
             $table->increments('cat_id');
             $table->string('cat_nom');
             $table->integer('est');
+            $table->dateTime('fech_crea')->nullable();
+            $table->dateTime('fech_modif')->nullable();
         });
         Schema::connection('legacy')->create('tm_documento', function (Blueprint $table): void {
             $table->increments('doc_id');
@@ -66,12 +69,35 @@ class PriceCatalogTest extends TestCase
             $table->integer('men_id');
             $table->string('mend_permi');
         });
+        Schema::connection('legacy')->create('tm_areas', function (Blueprint $table): void {
+            $table->increments('area_id');
+            $table->string('area_nom');
+            $table->string('area_correo')->nullable();
+            $table->string('direccion_plantel')->nullable();
+            $table->string('espacio')->nullable();
+            $table->integer('matricula')->nullable();
+            $table->decimal('monto', 11, 2)->nullable();
+            $table->decimal('garantia', 11, 2)->nullable();
+            $table->string('espacio_foto')->nullable();
+            $table->integer('matricula_foto')->nullable();
+            $table->decimal('monto_foto', 11, 2)->nullable();
+            $table->decimal('garantia_foto', 11, 2)->nullable();
+            $table->integer('est');
+            $table->dateTime('fech_crea')->nullable();
+            $table->dateTime('fech_modif')->nullable();
+        });
+        Schema::connection('legacy')->create('tm_subcategoria', function (Blueprint $table): void {
+            $table->increments('cats_id');
+            $table->integer('cat_id');
+            $table->text('cats_nom')->nullable();
+        });
 
         DB::connection('legacy')->table('tm_usuario')->insert([
             ['usu_id' => 1, 'usu_area' => 'Administración', 'rol_id' => 18, 'usu_pass' => 'x'],
             ['usu_id' => 2, 'usu_area' => 'Concursante', 'rol_id' => 9, 'usu_pass' => 'x'],
         ]);
         DB::connection('legacy')->table('tm_categoria_widi')->insert([
+            ['cat_id' => 2, 'cat_nom' => 'SEPTIMA', 'est' => 0],
             ['cat_id' => 8, 'cat_nom' => 'Convocatoria de Cafetería', 'est' => 1],
             ['cat_id' => 9, 'cat_nom' => 'Convocatoria de Fotocopiado', 'est' => 1],
         ]);
@@ -79,12 +105,14 @@ class PriceCatalogTest extends TestCase
             ['men_id' => 4, 'men_nom' => 'NuevoOficio', 'est' => 1],
             ['men_id' => 9, 'men_nom' => 'Tipo', 'est' => 1],
             ['men_id' => 10, 'men_nom' => 'Asuntos', 'est' => 1],
+            ['men_id' => 11, 'men_nom' => 'Areas', 'est' => 1],
             ['men_id' => 16, 'men_nom' => 'Categorias_widi', 'est' => 1],
         ]);
         DB::connection('legacy')->table('td_medu_detalle')->insert([
             ['rol_id' => 18, 'men_id' => 16, 'mend_permi' => 'si'],
             ['rol_id' => 18, 'men_id' => 9, 'mend_permi' => 'si'],
             ['rol_id' => 18, 'men_id' => 10, 'mend_permi' => 'si'],
+            ['rol_id' => 18, 'men_id' => 11, 'mend_permi' => 'si'],
             ['rol_id' => 9, 'men_id' => 4, 'mend_permi' => 'si'],
         ]);
         DB::connection('legacy')->table('tm_tipo')->insert([
@@ -96,8 +124,23 @@ class PriceCatalogTest extends TestCase
             ['trami_id' => 4, 'trami_nom' => 'Fotocopiado', 'trami_descrip' => 'Servicio de copias', 'est' => 1],
             ['trami_id' => 5, 'trami_nom' => 'Cafetería y Fotocopiado', 'trami_descrip' => 'Servicio combinado', 'est' => 0],
         ]);
+        DB::connection('legacy')->table('tm_areas')->insert([
+            'area_id' => 23, 'area_nom' => 'Plantel Atlacomulco', 'area_correo' => 'atlacomulco@cobaemex.edu.mx', 'direccion_plantel' => 'Atlacomulco, México', 'espacio' => '120 m²', 'matricula' => 800, 'monto' => 1000, 'garantia' => 500, 'est' => 1,
+        ]);
+        DB::connection('legacy')->table('tm_areas')->insert([
+            'area_id' => 24, 'area_nom' => 'CEMSaD Acambay', 'area_correo' => 'acambay@cobaemex.edu.mx', 'direccion_plantel' => 'Acambay, México', 'espacio_foto' => '20 m²', 'matricula_foto' => 300, 'monto_foto' => 400, 'garantia_foto' => 200, 'est' => 1,
+        ]);
+        DB::connection('legacy')->table('tm_areas')->insert([
+            'area_id' => 99, 'area_nom' => 'Dirección Académica', 'area_correo' => null, 'direccion_plantel' => null, 'est' => 1,
+        ]);
+        DB::connection('legacy')->table('tm_subcategoria')->insert([
+            ['cat_id' => 2, 'cats_nom' => 'Plantel Atlacomulco'],
+            ['cat_id' => 8, 'cats_nom' => 'Plantel Atlacomulco'],
+            ['cat_id' => 9, 'cats_nom' => 'CEMSaD Acambay'],
+        ]);
         app(DocumentTypes::class)->importLegacy();
         app(ServiceTypes::class)->importLegacy();
+        app(CcyfStructure::class)->importLegacy();
     }
 
     public function test_admin_can_change_one_convocation_without_affecting_another(): void
@@ -124,16 +167,16 @@ class PriceCatalogTest extends TestCase
 
     public function test_proposal_draft_uses_only_current_products_and_rejects_extra_prices(): void
     {
-        $catalog = app(PriceCatalogs::class)->prepare(8, 1);
+        $catalog = app(PriceCatalogs::class)->prepare(8);
         $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog)->pluck('id');
         $prices = $products->mapWithKeys(fn ($id) => [$id => '12.50'])->all();
         $this->asUser(2);
 
-        $this->post('/nuevo-oficio/8/precios', ['tipo_documento_id' => 1, 'precios' => $prices + [99999 => '0.01']])
+        $this->post('/nuevo-oficio/8/precios', ['tipo_documento_id' => 1, 'plantel_id' => 23, 'precios' => $prices + [99999 => '0.01']])
             ->assertSessionHasErrors('precios');
         $this->assertDatabaseCount('ccyf_precio_borradores', 0);
 
-        $this->post('/nuevo-oficio/8/precios', ['tipo_documento_id' => 1, 'precios' => $prices])->assertSessionHasNoErrors();
+        $this->post('/nuevo-oficio/8/precios', ['tipo_documento_id' => 1, 'plantel_id' => 23, 'precios' => $prices])->assertSessionHasNoErrors();
         $this->assertDatabaseCount('ccyf_precio_borrador_detalles', $products->count());
         $this->assertDatabaseHas('ccyf_precio_borradores', ['tipo_documento_id' => 1, 'usu_id' => 2]);
         $this->get('/nuevo-oficio/8')->assertOk()->assertSee('12.50');
@@ -141,7 +184,7 @@ class PriceCatalogTest extends TestCase
 
     public function test_concursante_cannot_edit_catalog_and_admin_cannot_save_a_proposal(): void
     {
-        app(PriceCatalogs::class)->prepare(8, 1);
+        app(PriceCatalogs::class)->prepare(8);
         $this->asUser(2);
         $this->get('/catalogos')->assertForbidden();
         $this->post('/catalogos/8/productos', ['nombre' => 'Nuevo'])->assertForbidden();
@@ -164,7 +207,7 @@ class PriceCatalogTest extends TestCase
 
     public function test_inactive_types_are_excluded_and_last_active_type_cannot_be_deactivated(): void
     {
-        $catalog = app(PriceCatalogs::class)->prepare(8, 1);
+        $catalog = app(PriceCatalogs::class)->prepare(8);
         $prices = DB::table('ccyf_productos')->where('catalogo_id', $catalog)
             ->pluck('id')->mapWithKeys(fn ($id) => [$id => '10.00'])->all();
         $this->asUser(1);
@@ -174,9 +217,9 @@ class PriceCatalogTest extends TestCase
 
         $this->asUser(2);
         $this->get('/nuevo-oficio/8')->assertOk()->assertSee('Oficio Externo')->assertDontSee('<option value="1"', false);
-        $this->post('/nuevo-oficio/8/precios', ['tipo_documento_id' => 1, 'precios' => $prices])
+        $this->post('/nuevo-oficio/8/precios', ['tipo_documento_id' => 1, 'plantel_id' => 23, 'precios' => $prices])
             ->assertSessionHasErrors('tipo_documento_id');
-        $this->post('/nuevo-oficio/8/precios', ['tipo_documento_id' => 2, 'precios' => $prices])
+        $this->post('/nuevo-oficio/8/precios', ['tipo_documento_id' => 2, 'plantel_id' => 23, 'precios' => $prices])
             ->assertSessionHasNoErrors();
         $this->assertDatabaseHas('ccyf_precio_borradores', ['tipo_documento_id' => 2, 'usu_id' => 2]);
     }
@@ -204,7 +247,7 @@ class PriceCatalogTest extends TestCase
 
     public function test_administrator_can_manage_services_and_names_update_new_office(): void
     {
-        app(PriceCatalogs::class)->prepare(8, 1);
+        app(PriceCatalogs::class)->prepare(8);
         $this->asUser(1);
         $this->post('/tipos-servicios', [
             'nombre' => 'cafetería', 'descripcion' => 'Duplicado',
@@ -222,7 +265,7 @@ class PriceCatalogTest extends TestCase
 
     public function test_inactive_service_is_not_available_for_new_offices_or_catalogs(): void
     {
-        app(PriceCatalogs::class)->prepare(8, 1);
+        app(PriceCatalogs::class)->prepare(8);
         $this->asUser(1);
         $this->patch('/tipos-servicios/1/estado')->assertSessionHasNoErrors();
         $this->get('/nuevo-oficio')->assertOk()->assertDontSee('Convocatoria de Cafetería');
@@ -240,6 +283,122 @@ class PriceCatalogTest extends TestCase
         $this->get('/tipos-servicios')->assertForbidden();
         $this->post('/tipos-servicios', ['nombre' => 'Otro', 'descripcion' => 'Otro'])->assertForbidden();
         $this->patch('/tipos-servicios/2/estado')->assertForbidden();
+    }
+
+    public function test_legacy_planteles_and_convocations_are_imported_once_with_real_assignments(): void
+    {
+        $result = app(CcyfStructure::class)->importLegacy();
+
+        $this->assertSame(['campuses' => 0, 'convocations' => 0, 'assignments' => 0], $result);
+        $this->assertDatabaseCount('ccyf_planteles', 2);
+        $this->assertDatabaseCount('ccyf_convocatorias', 3);
+        $this->assertDatabaseCount('ccyf_convocatoria_planteles', 3);
+        $this->assertDatabaseHas('ccyf_convocatorias', [
+            'legacy_cat_id' => 2, 'numero' => 'SEPTIMA', 'servicio_id' => null, 'activo' => 0,
+        ]);
+        $this->assertDatabaseHas('ccyf_plantel_servicios', [
+            'plantel_id' => 23, 'servicio_id' => 1, 'matricula' => 800,
+        ]);
+        $this->assertDatabaseHas('ccyf_convocatoria_planteles', [
+            'convocatoria_id' => 9, 'plantel_id' => 24,
+        ]);
+    }
+
+    public function test_administrator_can_manage_campuses_and_their_service_conditions(): void
+    {
+        $this->asUser(1);
+        $this->get('/planteles')->assertOk()->assertSee('Plantel Atlacomulco')->assertSee('CEMSaD Acambay');
+        $this->post('/planteles', [
+            'nombre' => 'Plantel Metepec',
+            'correo' => 'metepec@cobaemex.edu.mx',
+            'direccion' => 'Metepec, México',
+            'servicios' => [1 => [
+                'habilitado' => 1, 'espacio' => '95 m²', 'matricula' => 640,
+                'monto' => '1250.50', 'garantia' => '600.00',
+            ]],
+        ])->assertSessionHasNoErrors();
+
+        $campusId = DB::table('ccyf_planteles')->where('nombre', 'Plantel Metepec')->value('id');
+        $this->assertNotNull($campusId);
+        $this->assertDatabaseHas('ccyf_plantel_servicios', ['plantel_id' => $campusId, 'servicio_id' => 1]);
+        $this->put("/planteles/{$campusId}", [
+            'nombre' => 'Plantel Metepec Centro', 'correo' => 'centro@cobaemex.edu.mx',
+        ])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ccyf_planteles', ['id' => $campusId, 'nombre' => 'Plantel Metepec Centro']);
+        $this->patch("/planteles/{$campusId}/estado")->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ccyf_planteles', ['id' => $campusId, 'activo' => 0]);
+    }
+
+    public function test_administrator_can_manage_convocations_and_assign_campuses(): void
+    {
+        $this->asUser(1);
+        $this->get('/convocatorias')->assertOk()->assertSee('Convocatoria de Cafetería')->assertSee('1 planteles');
+        $this->post('/convocatorias', [
+            'numero' => 'Sexta-2027-Cafetería', 'servicio_id' => 1, 'planteles' => [23, 24],
+        ])->assertSessionHasNoErrors();
+
+        $id = DB::table('ccyf_convocatorias')->where('numero', 'Sexta-2027-Cafetería')->value('id');
+        $this->assertNotNull($id);
+        $this->assertSame(2, DB::table('ccyf_convocatoria_planteles')->where('convocatoria_id', $id)->count());
+        $this->put("/convocatorias/{$id}", [
+            'numero' => 'Sexta-2027', 'servicio_id' => 2, 'planteles' => [24],
+        ])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ccyf_convocatorias', ['id' => $id, 'numero' => 'Sexta-2027', 'servicio_id' => 2]);
+        $this->patch("/convocatorias/{$id}/estado")->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ccyf_convocatorias', ['id' => $id, 'activo' => 0]);
+    }
+
+    public function test_service_cannot_change_after_convocation_products_are_configured(): void
+    {
+        app(PriceCatalogs::class)->prepare(8);
+        $this->asUser(1);
+
+        $this->put('/convocatorias/8', [
+            'numero' => 'Convocatoria de Cafetería', 'servicio_id' => 2, 'planteles' => [23],
+        ])->assertSessionHasErrors('servicio_id');
+        $this->assertDatabaseHas('ccyf_convocatorias', ['id' => 8, 'servicio_id' => 1]);
+    }
+
+    public function test_historical_convocation_without_service_cannot_be_activated_until_completed(): void
+    {
+        $this->asUser(1);
+
+        $this->patch('/convocatorias/2/estado')->assertSessionHasErrors('convocatoria');
+        $this->assertDatabaseHas('ccyf_convocatorias', ['id' => 2, 'activo' => 0, 'servicio_id' => null]);
+        $this->put('/convocatorias/2', [
+            'numero' => 'SEPTIMA', 'servicio_id' => 1, 'planteles' => [23],
+        ])->assertSessionHasNoErrors();
+        $this->patch('/convocatorias/2/estado')->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ccyf_convocatorias', ['id' => 2, 'activo' => 1, 'servicio_id' => 1]);
+    }
+
+    public function test_new_office_accepts_only_campuses_assigned_to_the_convocation(): void
+    {
+        $catalog = app(PriceCatalogs::class)->prepare(8);
+        $prices = DB::table('ccyf_productos')->where('catalogo_id', $catalog)
+            ->pluck('id')->mapWithKeys(fn ($id) => [$id => '18.50'])->all();
+        $this->asUser(2);
+
+        $this->get('/nuevo-oficio/8')->assertOk()
+            ->assertSee('Plantel Atlacomulco')->assertDontSee('CEMSaD Acambay');
+        $this->post('/nuevo-oficio/8/precios', [
+            'tipo_documento_id' => 1, 'plantel_id' => 24, 'precios' => $prices,
+        ])->assertSessionHasErrors('plantel_id');
+        $this->post('/nuevo-oficio/8/precios', [
+            'tipo_documento_id' => 1, 'plantel_id' => 23, 'precios' => $prices,
+        ])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ccyf_precio_borradores', ['usu_id' => 2, 'plantel_id' => 23]);
+    }
+
+    public function test_concursante_cannot_manage_campuses_or_convocations(): void
+    {
+        $this->asUser(2);
+        $this->get('/planteles')->assertForbidden();
+        $this->post('/planteles', ['nombre' => 'Plantel Nuevo'])->assertForbidden();
+        $this->get('/convocatorias')->assertForbidden();
+        $this->post('/convocatorias', [
+            'numero' => 'Nueva', 'servicio_id' => 1, 'planteles' => [23],
+        ])->assertForbidden();
     }
 
     private function asUser(int $id): void

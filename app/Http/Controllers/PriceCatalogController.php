@@ -16,12 +16,12 @@ class PriceCatalogController extends Controller
     {
         $this->authorizeCatalog($request, $menu);
 
-        $categories = DB::connection('legacy')->table('tm_categoria_widi')
-            ->where('est', 1)->orderByDesc('cat_id')->get(['cat_id', 'cat_nom']);
+        $categories = DB::table('ccyf_convocatorias')->where('activo', true)->orderByDesc('id')
+            ->get(['id as cat_id', 'numero as cat_nom']);
         $configured = DB::table('ccyf_catalogos')
             ->leftJoin('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'ccyf_catalogos.servicio_id')
-            ->whereIn('legacy_cat_id', $categories->pluck('cat_id'))
-            ->get(['ccyf_catalogos.*', 'servicio.nombre as servicio_nombre'])->keyBy('legacy_cat_id');
+            ->whereIn('convocatoria_id', $categories->pluck('cat_id'))
+            ->get(['ccyf_catalogos.*', 'servicio.nombre as servicio_nombre'])->keyBy('convocatoria_id');
 
         return view('catalogos.index', compact('categories', 'configured'));
     }
@@ -29,27 +29,25 @@ class PriceCatalogController extends Controller
     public function show(int $category, Request $request, LegacyMenu $menu, PriceCatalogs $catalogs): View
     {
         $this->authorizeCatalog($request, $menu);
-        $legacy = $catalogs->legacyCategory($category);
+        $legacy = $catalogs->category($category);
         abort_unless($legacy, 404);
 
         $catalog = DB::table('ccyf_catalogos')
             ->leftJoin('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'ccyf_catalogos.servicio_id')
-            ->where('legacy_cat_id', $category)
+            ->where('convocatoria_id', $category)
             ->first(['ccyf_catalogos.*', 'servicio.nombre as servicio_nombre']);
         $products = $catalog ? DB::table('ccyf_productos')->where('catalogo_id', $catalog->id)
             ->orderBy('orden')->orderBy('id')->get() : collect();
-        $services = DB::table('ccyf_tipos_servicio')->where('activo', true)->orderBy('nombre')->get();
-        $suggestedServiceId = $catalogs->suggestedServiceId($category, (string) $legacy->cat_nom);
+        $service = DB::table('ccyf_tipos_servicio')->where('id', $legacy->servicio_id)->first();
 
-        return view('catalogos.show', compact('legacy', 'catalog', 'products', 'services', 'suggestedServiceId'));
+        return view('catalogos.show', compact('legacy', 'catalog', 'products', 'service'));
     }
 
     public function prepare(int $category, Request $request, LegacyMenu $menu, PriceCatalogs $catalogs): RedirectResponse
     {
         $this->authorizeCatalog($request, $menu);
-        abort_unless($catalogs->legacyCategory($category, true), 404);
-        $data = $request->validate(['servicio_id' => ['required', 'integer']]);
-        $catalogs->prepare($category, (int) $data['servicio_id']);
+        abort_unless($catalogs->category($category, true), 404);
+        $catalogs->prepare($category);
 
         return redirect()->route('catalogos.show', $category)->with('status', 'Catálogo preparado. Puedes ajustar sus productos.');
     }
@@ -103,7 +101,7 @@ class PriceCatalogController extends Controller
 
     private function catalog(int $category): object
     {
-        $catalog = DB::table('ccyf_catalogos')->where('legacy_cat_id', $category)->first();
+        $catalog = DB::table('ccyf_catalogos')->where('convocatoria_id', $category)->first();
         abort_unless($catalog, 404);
 
         return $catalog;
