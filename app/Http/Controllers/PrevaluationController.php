@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\LegacyMenu;
+use App\Services\DocumentFiles;
 use App\Services\PrevaluationRecords;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -176,17 +177,17 @@ class PrevaluationController extends Controller
         return redirect()->route('prevaluaciones.index', $this->returnQuery($request, $record))->with('status', 'Observación del administrador guardada.');
     }
 
-    public function file(string $key, string $field, Request $request, LegacyMenu $menu, PrevaluationRecords $records): BinaryFileResponse
+    public function file(string $key, string $field, Request $request, LegacyMenu $menu, PrevaluationRecords $records, DocumentFiles $files): BinaryFileResponse
     {
         $this->authorizeView($request, $menu);
         $record = $this->record($records, $key);
-        $path = $records->filePath($record, $field);
-        abort_unless($path, 404);
-        $response = response()->file($path, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="documento-'.$record->registro_id.'.pdf"',
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        abort_unless($records->documents($record)->contains('clave', $field), 404);
+        $file = $files->effective($record->origen, $record->registro_id, $field);
+        abort_unless($file, 404);
+        $inline = in_array($file['mime'], ['application/pdf', 'image/jpeg', 'image/png'], true);
+        $response = $inline ? response()->file($file['path'], ['Content-Type' => $file['mime']])
+            : response()->download($file['path'], $file['name'], ['Content-Type' => $file['mime']]);
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->setPrivate();
         $response->headers->addCacheControlDirective('no-store');
         return $response;

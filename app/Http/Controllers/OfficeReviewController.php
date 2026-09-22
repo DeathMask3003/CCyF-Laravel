@@ -3,12 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Services\FinishedRecords;
+use App\Services\DocumentFiles;
 use App\Services\LegacyMenu;
+use App\Services\PrevaluationCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -49,7 +50,7 @@ class OfficeReviewController extends Controller
         ]);
     }
 
-    public function show(int $record, Request $request, LegacyMenu $menu): View
+    public function show(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles): View
     {
         $registration = $this->localRecords()->where('registro.id', $record)->first();
         abort_unless($registration, 404);
@@ -58,12 +59,20 @@ class OfficeReviewController extends Controller
         $files = DB::table('ccyf_registro_archivos as archivo')
             ->join('ccyf_requisitos_documento as requisito', 'requisito.id', '=', 'archivo.requisito_id')
             ->where('archivo.registro_id', $record)->orderBy('requisito.orden')
-            ->get(['archivo.id', 'archivo.nombre_original', 'archivo.bytes', 'requisito.nombre']);
+            ->get(['archivo.id', 'archivo.requisito_id', 'archivo.nombre_original', 'archivo.bytes', 'requisito.nombre'])
+            ->map(function ($item) use ($record, $documentFiles): object {
+                $updated = $documentFiles->latest('actual', $record, 'req-'.$item->requisito_id);
+                if ($updated) {
+                    $item->nombre_original = $updated->original_name;
+                    $item->bytes = $updated->bytes;
+                }
+                return $item;
+            });
 
         return view('revision.show', compact('registration', 'prices', 'files'));
     }
 
-    public function historical(int $record, Request $request, LegacyMenu $menu): View
+    public function historical(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles): View
     {
         $registration = DB::connection('legacy')->table('tm_documento as documento')
             ->leftJoin('tm_usuario as usuario', 'usuario.usu_id', '=', 'documento.usu_id')
@@ -77,9 +86,9 @@ class OfficeReviewController extends Controller
             ]);
         abort_unless($registration, 404);
         $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
-        $documents = DB::connection('legacy')->table('td_documentov3')->where('doc_id', $record)
-            ->where('est', 1)->orderByDesc('det_id')->first();
-        $requirements = $documents ? collect($this->historicalKeys())->filter(fn ($label, $key) => filled($documents->{$key} ?? null)) : collect();
+        $service = (int) $registration->trami_id === 3 ? 'cafeteria' : 'fotocopiado';
+        $requirements = collect(PrevaluationCatalog::documents($service))
+            ->filter(fn ($label, $key) => $documentFiles->effective('historico', $record, $key) !== null);
 
         return view('revision.historical', compact('registration', 'requirements'));
     }
@@ -132,38 +141,37 @@ class OfficeReviewController extends Controller
         return redirect()->route('revision.finished')->with('status', count($ids).' propuestas finalizadas como no aceptadas.');
     }
 
-    public function file(int $record, int $file, Request $request, LegacyMenu $menu): BinaryFileResponse
+    public function file(int $record, int $file, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles): BinaryFileResponse
     {
         $registration = DB::table('ccyf_registros')->where('id', $record)->first(['usu_id', 'estado']);
         abort_unless($registration, 404);
         $this->authorizeRecord($request, $menu, (int) $registration->usu_id, $registration->estado);
         $document = DB::table('ccyf_registro_archivos')->where('id', $file)->where('registro_id', $record)->first();
-        abort_unless($document && Storage::disk('local')->exists($document->ruta), 404);
-
-        return response()->download(Storage::disk('local')->path($document->ruta), 'documento-'.$file.'.pdf', [
-            'Content-Type' => 'application/pdf', 'X-Content-Type-Options' => 'nosniff',
-        ]);
+        abort_unless($document, 404);
+        $current = $documentFiles->effective('actual', $record, 'req-'.$document->requisito_id);
+        abort_unless($current, 404);
+        return $this->sendDocument($current, $current['mime'] === 'application/pdf' ? 'documento-'.$file.'.pdf' : $current['name']);
     }
 
-    public function historicalFile(int $record, string $key, Request $request, LegacyMenu $menu): BinaryFileResponse
+    public function historicalFile(int $record, string $key, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles): BinaryFileResponse
     {
         abort_unless(array_key_exists($key, $this->historicalKeys()), 404);
         $registration = DB::connection('legacy')->table('tm_documento')->where('doc_id', $record)
             ->where('doc_estado', 'Finalizado')->whereIn('trami_id', [3, 4])->first(['usu_id']);
         abort_unless($registration, 404);
         $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
-        $documents = DB::connection('legacy')->table('td_documentov3')->where('doc_id', $record)
-            ->where('est', 1)->orderByDesc('det_id')->first();
-        $name = $documents ? ($documents->{$key} ?? null) : null;
-        abort_unless(is_string($name) && $name !== '' && basename($name) === $name && str_ends_with(strtolower($name), '.pdf'), 404);
-        $root = realpath(config('ccyf.legacy_files_root'));
-        abort_unless($root, 404);
-        $path = realpath($root.DIRECTORY_SEPARATOR.$record.DIRECTORY_SEPARATOR.$name);
-        abort_unless($path && str_starts_with($path, $root.DIRECTORY_SEPARATOR) && is_file($path), 404);
+        $current = $documentFiles->effective('historico', $record, $key);
+        abort_unless($current, 404);
+        return $this->sendDocument($current, $current['mime'] === 'application/pdf' ? $key.'-'.$record.'.pdf' : $current['name']);
+    }
 
-        return response()->download($path, $key.'-'.$record.'.pdf', [
-            'Content-Type' => 'application/pdf', 'X-Content-Type-Options' => 'nosniff',
-        ]);
+    private function sendDocument(array $file, string $name): BinaryFileResponse
+    {
+        $response = response()->download($file['path'], $name, ['Content-Type' => $file['mime']]);
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->setPrivate();
+        $response->headers->addCacheControlDirective('no-store');
+        return $response;
     }
 
     private function localRecords()

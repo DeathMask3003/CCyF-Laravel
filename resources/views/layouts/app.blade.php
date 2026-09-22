@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#611232">
     <title>@yield('title', 'CCyF') · CoBaEMex</title>
-    <link rel="stylesheet" href="{{ asset('css/ccyf.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/ccyf.css') }}?v=20260922-1">
     @stack('head')
 </head>
 <body>
@@ -27,6 +27,7 @@
                 @php($canFinished = $ccyfMenu->allows(auth()->user(), 'buscarOficio') || $canPending || $ccyfMenu->allows(auth()->user(), 'NuevoOficio'))
                 @php($canTracking = $ccyfMenu->allows(auth()->user(), 'seguimiento_permisionarios'))
                 @php($canPreval = $ccyfMenu->allows(auth()->user(), 'prevaluacion') || $ccyfMenu->allows(auth()->user(), 'Prevaluaciones_admin'))
+                @php($canDocumentAdmin = $ccyfMenu->allows(auth()->user(), 'actualiza_docs'))
                 @php($canUsers = $ccyfMenu->allows(auth()->user(), 'Usuarios'))
                 @php($canRoles = $ccyfMenu->allows(auth()->user(), 'Rol'))
                 <nav class="main-nav" aria-label="Menú principal">
@@ -38,6 +39,7 @@
                     @if ($canFinished)<a href="{{ route('revision.finished') }}" aria-label="Convocatorias finalizadas" @class(['active' => request()->routeIs('revision.finished', 'revision.historical')])>Finalizadas</a>@endif
                     @if ($canTracking)<a href="{{ route('seguimiento.index') }}" @class(['active' => request()->routeIs('seguimiento.*')])>Seguimiento</a>@endif
                     @if ($canPreval)<a href="{{ route('prevaluaciones.index') }}" @class(['active' => request()->routeIs('prevaluaciones.*')])>Prevaluaciones</a>@endif
+                    @if ($canDocumentAdmin)<a href="{{ route('documentacion.index') }}" @class(['active' => request()->routeIs('documentacion.*')])>Documentación</a>@endif
                     @if ($canProducts || $canTypes || $canServices || $canCampuses || $canConvocations || $canLinks)
                         <details class="nav-dropdown">
                             <summary @class(['active' => request()->routeIs('catalogos.*', 'tipos.*', 'servicios.*', 'planteles.*', 'convocatorias.*', 'enlaces.*')])>Catálogos <span aria-hidden="true">⌄</span></summary>
@@ -66,6 +68,7 @@
                         <summary title="{{ auth()->user()->usu_area }}">{{ auth()->user()->usu_area }} <span aria-hidden="true">⌄</span></summary>
                         <div class="nav-dropdown-menu">
                             <a href="{{ route('perfil.show') }}" @class(['active' => request()->routeIs('perfil.*')])>Mi perfil</a>
+                            <a href="{{ route('documentacion.index') }}" @class(['active' => request()->routeIs('documentacion.*')])>Mis documentos</a>
                             <a href="{{ route('ubicaciones.index') }}" @class(['active' => request()->routeIs('ubicaciones.*')])>Mis ubicaciones</a>
                         </div>
                     </details>

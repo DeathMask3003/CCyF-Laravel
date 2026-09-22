@@ -4,10 +4,11 @@ namespace App\Services;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class PrevaluationRecords
 {
+    public function __construct(private readonly DocumentFiles $files) {}
+
     public function all(): Collection
     {
         $localEvaluations = DB::table('ccyf_prevaluaciones')->get()->keyBy(fn ($item) => $item->origen.':'.$item->registro_id);
@@ -117,22 +118,19 @@ class PrevaluationRecords
                     $join->on('file.requisito_id', '=', 'req.id')->on('file.registro_id', '=', 'r.id');
                 })
                 ->where('r.id', $record->registro_id)->where('req.activo', true)
-                ->orderBy('req.orden')->get(['req.id', 'req.nombre', 'req.clave', 'file.ruta'])
-                ->map(fn ($item) => (object) [
-                    'clave' => 'req-'.$item->id, 'nombre' => $item->nombre,
-                    'available' => (bool) ($item->ruta && Storage::disk('local')->exists($item->ruta)),
-                ]);
+                ->orderBy('req.orden')->get(['req.id', 'req.nombre', 'req.clave'])
+                ->map(function ($item) use ($record): object {
+                    $file = $this->files->effective('actual', $record->registro_id, 'req-'.$item->id);
+                    return (object) ['clave' => 'req-'.$item->id, 'nombre' => $item->nombre,
+                        'available' => $file !== null, 'mime' => $file['mime'] ?? null];
+                });
         }
 
-        $row = DB::connection('legacy')->table('td_documentov3')->where('doc_id', $record->registro_id)
-            ->where('est', 1)->orderByDesc('det_id')->first();
         return collect(PrevaluationCatalog::documents($record->servicio))
-            ->map(function ($name, $key) use ($row, $record): object {
-                $file = $row?->{$key} ?? null;
-                return (object) [
-                    'clave' => $key, 'nombre' => $name,
-                    'available' => is_string($file) && $this->historicalFile($record->registro_id, $file) !== null,
-                ];
+            ->map(function ($name, $key) use ($record): object {
+                $file = $this->files->effective('historico', $record->registro_id, $key);
+                return (object) ['clave' => $key, 'nombre' => $name,
+                    'available' => $file !== null, 'mime' => $file['mime'] ?? null];
             })->values();
     }
 
@@ -158,23 +156,7 @@ class PrevaluationRecords
 
     public function filePath(object $record, string $key): ?string
     {
-        if ($record->origen === 'actual') {
-            if (! preg_match('/^req-([1-9]\d*)$/', $key, $matches)) return null;
-            $file = DB::table('ccyf_registro_archivos')->where('registro_id', $record->registro_id)
-                ->where('requisito_id', (int) $matches[1])->first();
-            return $file && Storage::disk('local')->exists($file->ruta) ? Storage::disk('local')->path($file->ruta) : null;
-        }
-        if (! array_key_exists($key, PrevaluationCatalog::documents($record->servicio))) return null;
-        $row = DB::connection('legacy')->table('td_documentov3')->where('doc_id', $record->registro_id)
-            ->where('est', 1)->orderByDesc('det_id')->first([$key]);
-        return $row ? $this->historicalFile($record->registro_id, $row->{$key}) : null;
-    }
-
-    private function historicalFile(int $record, mixed $file): ?string
-    {
-        if (! is_string($file) || $file === '' || basename($file) !== $file || ! preg_match('/\.pdf$/i', $file)) return null;
-        $root = realpath(config('ccyf.legacy_files_root'));
-        $path = $root ? realpath($root.DIRECTORY_SEPARATOR.$record.DIRECTORY_SEPARATOR.$file) : false;
-        return $root && $path && str_starts_with($path, $root.DIRECTORY_SEPARATOR) && is_file($path) ? $path : null;
+        if (! $this->documents($record)->contains('clave', $key)) return null;
+        return $this->files->effective($record->origen, $record->registro_id, $key)['path'] ?? null;
     }
 }

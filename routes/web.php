@@ -7,6 +7,7 @@ use App\Http\Controllers\ConvocationLinkController;
 use App\Http\Controllers\CcyfRoleController;
 use App\Http\Controllers\CcyfUserController;
 use App\Http\Controllers\DocumentTypeController;
+use App\Http\Controllers\DocumentUpdateController;
 use App\Http\Controllers\FinishedExportController;
 use App\Http\Controllers\NewOfficeController;
 use App\Http\Controllers\OfficeReviewController;
@@ -24,9 +25,7 @@ Route::redirect('/', '/panel');
 Route::middleware('guest')->group(function (): void {
     Route::get('/acceso', [AccessController::class, 'create'])->name('login');
     Route::post('/acceso', [AccessController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
-    Route::get('/verificacion', [AccessController::class, 'challenge'])->name('mfa.challenge');
-    Route::post('/verificacion', [AccessController::class, 'verify'])->middleware('throttle:5,1')->name('mfa.verify');
-    Route::post('/verificacion/reenviar', [AccessController::class, 'resend'])->middleware('throttle:2,1')->name('mfa.resend');
+    Route::redirect('/verificacion', '/acceso');
 });
 
 Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
@@ -37,6 +36,15 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::put('/mi-perfil/contrasena', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('perfil.password');
     Route::get('/ubicaciones', [LocationController::class, 'index'])->name('ubicaciones.index');
     Route::post('/ubicaciones', [LocationController::class, 'store'])->middleware('throttle:10,1')->name('ubicaciones.store');
+
+    Route::get('/actualizacion-documentacion', [DocumentUpdateController::class, 'index'])->name('documentacion.index');
+    Route::get('/actualizacion-documentacion/{key}', [DocumentUpdateController::class, 'show'])->name('documentacion.show');
+    Route::post('/actualizacion-documentacion/{key}', [DocumentUpdateController::class, 'update'])
+        ->middleware('throttle:10,1')->name('documentacion.update');
+    Route::get('/actualizacion-documentacion/{key}/archivos/{field}', [DocumentUpdateController::class, 'file'])->name('documentacion.file');
+    Route::get('/actualizacion-documentacion/{key}/original/{field}', [DocumentUpdateController::class, 'original'])->name('documentacion.original');
+    Route::get('/actualizacion-documentacion/{key}/versiones/{version}', [DocumentUpdateController::class, 'version'])
+        ->whereNumber('version')->name('documentacion.version');
 
     Route::get('/nuevo-oficio', [NewOfficeController::class, 'index'])->name('oficios.index');
     Route::get('/nuevo-oficio/{category}', [NewOfficeController::class, 'show'])->whereNumber('category')->name('oficios.show');

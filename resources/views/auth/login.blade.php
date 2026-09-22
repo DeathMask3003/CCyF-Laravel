@@ -6,7 +6,7 @@
 <section class="card" aria-labelledby="login-title">
     <span class="eyebrow">Acceso seguro</span>
     <h2 id="login-title">Iniciar sesión</h2>
-    <p class="muted">Ingresa con tu cuenta de CCyF. Te enviaremos un código de verificación por correo.</p>
+    <p class="muted">Ingresa con tu correo y contraseña de CCyF.</p>
 
     <form method="post" action="{{ route('login.store') }}">
         @csrf
@@ -18,7 +18,7 @@
         <input id="password" name="password" type="password" autocomplete="current-password" required>
         @error('password') <p class="error" role="alert">{{ $message }}</p> @enderror
 
-        <button class="primary" type="submit">Continuar</button>
+        <button class="primary" type="submit">Iniciar sesión</button>
     </form>
 </section>
 @endsection

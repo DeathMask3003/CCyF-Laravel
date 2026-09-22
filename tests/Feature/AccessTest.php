@@ -6,7 +6,6 @@ use App\Models\LegacyUser;
 use App\Services\LegacyPasswordVerifier;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -62,22 +61,18 @@ class AccessTest extends TestCase
         $this->get('/acceso')->assertOk();
     }
 
-    public function test_password_is_not_enough_to_authenticate(): void
+    public function test_valid_password_signs_in_without_email_code(): void
     {
-        Mail::fake();
-
         $this->post('/acceso', [
             'email' => 'PRUEBA@example.test',
             'password' => 'clave-prueba',
-        ])->assertRedirect('/verificacion')->assertSessionHas('ccyf.pending_user', 7);
+        ])->assertRedirect('/panel')->assertSessionMissing('ccyf.pending_user');
 
-        $this->assertGuest();
+        $this->assertAuthenticated();
     }
 
-    public function test_invalid_password_does_not_start_a_challenge(): void
+    public function test_invalid_password_does_not_authenticate(): void
     {
-        Mail::fake();
-
         $this->post('/acceso', [
             'email' => 'prueba@example.test',
             'password' => 'equivocada',
@@ -86,33 +81,17 @@ class AccessTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_correct_code_completes_authentication(): void
+    public function test_old_verification_link_returns_to_login(): void
     {
-        $code = '123456';
-        $this->withSession([
-            'ccyf.pending_user' => 7,
-            'ccyf.pending_until' => now()->addMinutes(10)->timestamp,
-            'ccyf.code_hash' => hash_hmac('sha256', $code, (string) config('app.key')),
-            'ccyf.code_attempts' => 0,
-        ])->post('/verificacion', ['code' => $code])->assertRedirect('/panel');
-
-        $this->assertAuthenticated();
+        $this->get('/verificacion')->assertRedirect('/acceso');
+        $this->assertGuest();
     }
 
-    public function test_five_wrong_codes_cancel_the_challenge(): void
+    public function test_inactive_role_still_cannot_sign_in(): void
     {
-        $session = [
-            'ccyf.pending_user' => 7,
-            'ccyf.pending_until' => now()->addMinutes(10)->timestamp,
-            'ccyf.code_hash' => hash_hmac('sha256', '123456', (string) config('app.key')),
-            'ccyf.code_attempts' => 4,
-        ];
-
-        $this->withSession($session)
-            ->post('/verificacion', ['code' => '000000'])
-            ->assertRedirect('/acceso')
-            ->assertSessionMissing('ccyf.pending_user');
-
+        DB::table('ccyf_roles')->insert(['rol_id'=>1,'legacy_rol_id'=>1,'rol_nom'=>'Concursante','est'=>0]);
+        $this->post('/acceso', ['email'=>'prueba@example.test','password'=>'clave-prueba'])
+            ->assertSessionHasErrors('email');
         $this->assertGuest();
     }
 
