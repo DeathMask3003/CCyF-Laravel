@@ -48,18 +48,16 @@ class ConvocationController extends Controller
         $this->assertUniqueNumber($structure->key($number));
 
         $id = DB::transaction(function () use ($data, $number, $structure): int {
-            $id = DB::table('ccyf_convocatorias')->insertGetId([
+            return DB::table('ccyf_convocatorias')->insertGetId([
                 'numero' => $number,
                 'numero_clave' => $structure->key($number),
                 'servicio_id' => $data['servicio_id'],
-                'activo' => true,
+                'activo' => false,
                 'created_at' => now(), 'updated_at' => now(),
             ]);
-            $this->syncCampuses($id, $data['planteles']);
-            return $id;
         });
 
-        return redirect()->route('convocatorias.edit', $id)->with('status', 'Número de convocatoria creado. Ahora puedes preparar sus productos y precios.');
+        return redirect()->route('convocatorias.edit', $id)->with('status', 'Número de convocatoria creado. Asigna sus planteles en Enlaces para convocatoria y después actívala.');
     }
 
     public function edit(int $convocation, Request $request, LegacyMenu $menu): View
@@ -83,15 +81,12 @@ class ConvocationController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($record, $data, $number, $structure): void {
-            DB::table('ccyf_convocatorias')->where('id', $record->id)->update([
-                'numero' => $number,
-                'numero_clave' => $structure->key($number),
-                'servicio_id' => $data['servicio_id'],
-                'updated_at' => now(),
-            ]);
-            $this->syncCampuses($record->id, $data['planteles']);
-        });
+        DB::table('ccyf_convocatorias')->where('id', $record->id)->update([
+            'numero' => $number,
+            'numero_clave' => $structure->key($number),
+            'servicio_id' => $data['servicio_id'],
+            'updated_at' => now(),
+        ]);
 
         return back()->with('status', 'Convocatoria actualizada.');
     }
@@ -121,12 +116,9 @@ class ConvocationController extends Controller
     private function formView(?object $convocation): View
     {
         $services = DB::table('ccyf_tipos_servicio')->where('activo', true)->orderBy('nombre')->get();
-        $campuses = DB::table('ccyf_planteles')->where('activo', true)->orderBy('nombre')->get(['id', 'nombre']);
-        $selected = $convocation ? DB::table('ccyf_convocatoria_planteles')
-            ->where('convocatoria_id', $convocation->id)->pluck('plantel_id')->map(fn ($id) => (int) $id)->all() : [];
         $hasCatalog = $convocation ? DB::table('ccyf_catalogos')->where('convocatoria_id', $convocation->id)->exists() : false;
 
-        return view('convocatorias.form', compact('convocation', 'services', 'campuses', 'selected', 'hasCatalog'));
+        return view('convocatorias.form', compact('convocation', 'services', 'hasCatalog'));
     }
 
     private function validateConvocation(Request $request): array
@@ -134,20 +126,7 @@ class ConvocationController extends Controller
         return $request->validate([
             'numero' => ['required', 'string', 'max:100'],
             'servicio_id' => ['required', 'integer', Rule::exists('ccyf_tipos_servicio', 'id')->where('activo', true)],
-            'planteles' => ['required', 'array', 'min:1'],
-            'planteles.*' => ['integer', Rule::exists('ccyf_planteles', 'id')->where('activo', true)],
         ]);
-    }
-
-    private function syncCampuses(int $convocationId, array $campuses): void
-    {
-        DB::table('ccyf_convocatoria_planteles')->where('convocatoria_id', $convocationId)->delete();
-        foreach (array_unique(array_map('intval', $campuses)) as $campusId) {
-            DB::table('ccyf_convocatoria_planteles')->insert([
-                'convocatoria_id' => $convocationId, 'plantel_id' => $campusId,
-                'created_at' => now(), 'updated_at' => now(),
-            ]);
-        }
     }
 
     private function authorizeConvocations(Request $request, LegacyMenu $menu): void

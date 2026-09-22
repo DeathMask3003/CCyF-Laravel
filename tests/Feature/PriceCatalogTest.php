@@ -6,10 +6,13 @@ use App\Models\LegacyUser;
 use App\Services\DocumentTypes;
 use App\Services\CcyfStructure;
 use App\Services\PriceCatalogs;
+use App\Services\RegistrationRequirements;
 use App\Services\ServiceTypes;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class PriceCatalogTest extends TestCase
@@ -107,12 +110,14 @@ class PriceCatalogTest extends TestCase
             ['men_id' => 10, 'men_nom' => 'Asuntos', 'est' => 1],
             ['men_id' => 11, 'men_nom' => 'Areas', 'est' => 1],
             ['men_id' => 16, 'men_nom' => 'Categorias_widi', 'est' => 1],
+            ['men_id' => 17, 'men_nom' => 'Subcategorias_widi', 'est' => 1],
         ]);
         DB::connection('legacy')->table('td_medu_detalle')->insert([
             ['rol_id' => 18, 'men_id' => 16, 'mend_permi' => 'si'],
             ['rol_id' => 18, 'men_id' => 9, 'mend_permi' => 'si'],
             ['rol_id' => 18, 'men_id' => 10, 'mend_permi' => 'si'],
             ['rol_id' => 18, 'men_id' => 11, 'mend_permi' => 'si'],
+            ['rol_id' => 18, 'men_id' => 17, 'mend_permi' => 'si'],
             ['rol_id' => 9, 'men_id' => 4, 'mend_permi' => 'si'],
         ]);
         DB::connection('legacy')->table('tm_tipo')->insert([
@@ -334,18 +339,20 @@ class PriceCatalogTest extends TestCase
         $this->asUser(1);
         $this->get('/convocatorias')->assertOk()->assertSee('Convocatoria de Cafetería')->assertSee('1 planteles');
         $this->post('/convocatorias', [
-            'numero' => 'Sexta-2027-Cafetería', 'servicio_id' => 1, 'planteles' => [23, 24],
+            'numero' => 'Sexta-2027-Cafetería', 'servicio_id' => 1,
         ])->assertSessionHasNoErrors();
 
         $id = DB::table('ccyf_convocatorias')->where('numero', 'Sexta-2027-Cafetería')->value('id');
         $this->assertNotNull($id);
+        $this->assertDatabaseHas('ccyf_convocatorias', ['id' => $id, 'activo' => 0]);
+        $this->put("/enlaces-convocatoria/{$id}", ['planteles' => [23, 24]])->assertSessionHasNoErrors();
         $this->assertSame(2, DB::table('ccyf_convocatoria_planteles')->where('convocatoria_id', $id)->count());
         $this->put("/convocatorias/{$id}", [
-            'numero' => 'Sexta-2027', 'servicio_id' => 2, 'planteles' => [24],
+            'numero' => 'Sexta-2027', 'servicio_id' => 2,
         ])->assertSessionHasNoErrors();
         $this->assertDatabaseHas('ccyf_convocatorias', ['id' => $id, 'numero' => 'Sexta-2027', 'servicio_id' => 2]);
         $this->patch("/convocatorias/{$id}/estado")->assertSessionHasNoErrors();
-        $this->assertDatabaseHas('ccyf_convocatorias', ['id' => $id, 'activo' => 0]);
+        $this->assertDatabaseHas('ccyf_convocatorias', ['id' => $id, 'activo' => 1]);
     }
 
     public function test_service_cannot_change_after_convocation_products_are_configured(): void
@@ -354,7 +361,7 @@ class PriceCatalogTest extends TestCase
         $this->asUser(1);
 
         $this->put('/convocatorias/8', [
-            'numero' => 'Convocatoria de Cafetería', 'servicio_id' => 2, 'planteles' => [23],
+            'numero' => 'Convocatoria de Cafetería', 'servicio_id' => 2,
         ])->assertSessionHasErrors('servicio_id');
         $this->assertDatabaseHas('ccyf_convocatorias', ['id' => 8, 'servicio_id' => 1]);
     }
@@ -366,7 +373,7 @@ class PriceCatalogTest extends TestCase
         $this->patch('/convocatorias/2/estado')->assertSessionHasErrors('convocatoria');
         $this->assertDatabaseHas('ccyf_convocatorias', ['id' => 2, 'activo' => 0, 'servicio_id' => null]);
         $this->put('/convocatorias/2', [
-            'numero' => 'SEPTIMA', 'servicio_id' => 1, 'planteles' => [23],
+            'numero' => 'SEPTIMA', 'servicio_id' => 1,
         ])->assertSessionHasNoErrors();
         $this->patch('/convocatorias/2/estado')->assertSessionHasNoErrors();
         $this->assertDatabaseHas('ccyf_convocatorias', ['id' => 2, 'activo' => 1, 'servicio_id' => 1]);
@@ -399,6 +406,79 @@ class PriceCatalogTest extends TestCase
         $this->post('/convocatorias', [
             'numero' => 'Nueva', 'servicio_id' => 1, 'planteles' => [23],
         ])->assertForbidden();
+        $this->get('/enlaces-convocatoria')->assertForbidden();
+        $this->put('/enlaces-convocatoria/8', ['planteles' => [23]])->assertForbidden();
+    }
+
+    public function test_links_module_updates_only_the_selected_convocation(): void
+    {
+        $this->asUser(1);
+        $this->get('/enlaces-convocatoria')->assertOk()
+            ->assertSee('Convocatoria de Cafetería')->assertSee('1 plantel vinculado');
+        $this->get('/enlaces-convocatoria/8/editar')->assertOk()
+            ->assertSee('Plantel Atlacomulco')->assertSee('CEMSaD Acambay');
+        $this->put('/enlaces-convocatoria/8', ['planteles' => [23, 24]])
+            ->assertRedirect('/enlaces-convocatoria')->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('ccyf_convocatoria_planteles', ['convocatoria_id' => 8, 'plantel_id' => 24]);
+        $this->assertDatabaseHas('ccyf_convocatoria_planteles', ['convocatoria_id' => 9, 'plantel_id' => 24]);
+    }
+
+    public function test_complete_new_registration_stores_prices_documents_and_folio(): void
+    {
+        Storage::fake('local');
+        $catalog = app(PriceCatalogs::class)->prepare(8);
+        $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog)->pluck('id');
+        $prices = $products->mapWithKeys(fn ($id) => [$id => '22.50'])->all();
+        $requirements = app(RegistrationRequirements::class)->activeFor(1);
+        $documents = $requirements->mapWithKeys(fn ($requirement) => [
+            $requirement->clave => UploadedFile::fake()->create($requirement->clave.'.pdf', 120, 'application/pdf'),
+        ])->all();
+        $this->asUser(2);
+
+        $this->post('/nuevo-oficio/8/registrar', [
+            'tipo_documento_id' => 1,
+            'plantel_id' => 23,
+            'comentarios' => 'Presento mi propuesta completa para la convocatoria.',
+            'precios' => $prices,
+            'documentos' => $documents,
+        ])->assertRedirect('/nuevo-oficio/registros/1')->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('ccyf_registros', [
+            'id' => 1, 'folio' => 'CCYF-'.now()->format('Y').'-00001', 'usu_id' => 2,
+            'convocatoria_id' => 8, 'plantel_id' => 23, 'estado' => 'Recibido',
+        ]);
+        $this->assertDatabaseCount('ccyf_registro_precios', $products->count());
+        $this->assertDatabaseCount('ccyf_registro_archivos', $requirements->count());
+        $this->assertCount($requirements->count(), Storage::disk('local')->allFiles('ccyf/registros/1'));
+        $this->get('/nuevo-oficio/registros/1')->assertOk()->assertSee('CCYF-'.now()->format('Y').'-00001');
+    }
+
+    public function test_complete_registration_rejects_missing_documents_and_duplicates(): void
+    {
+        Storage::fake('local');
+        $catalog = app(PriceCatalogs::class)->prepare(8);
+        $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog)->pluck('id');
+        $prices = $products->mapWithKeys(fn ($id) => [$id => '10.00'])->all();
+        $requirements = app(RegistrationRequirements::class)->activeFor(1);
+        $this->asUser(2);
+
+        $base = [
+            'tipo_documento_id' => 1, 'plantel_id' => 23,
+            'comentarios' => 'Propuesta de prueba', 'precios' => $prices,
+        ];
+        $this->post('/nuevo-oficio/8/registrar', $base)->assertSessionHasErrors('documentos');
+        $this->assertDatabaseCount('ccyf_registros', 0);
+
+        $base['documentos'] = $requirements->mapWithKeys(fn ($requirement) => [
+            $requirement->clave => UploadedFile::fake()->create($requirement->clave.'.pdf', 80, 'application/pdf'),
+        ])->all();
+        $this->post('/nuevo-oficio/8/registrar', $base)->assertSessionHasNoErrors();
+        $base['documentos'] = $requirements->mapWithKeys(fn ($requirement) => [
+            $requirement->clave => UploadedFile::fake()->create('duplicate-'.$requirement->clave.'.pdf', 80, 'application/pdf'),
+        ])->all();
+        $this->post('/nuevo-oficio/8/registrar', $base)->assertSessionHasErrors('plantel_id');
+        $this->assertDatabaseCount('ccyf_registros', 1);
     }
 
     private function asUser(int $id): void

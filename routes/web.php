@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AccessController;
 use App\Http\Controllers\CampusController;
 use App\Http\Controllers\ConvocationController;
+use App\Http\Controllers\ConvocationLinkController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\NewOfficeController;
 use App\Http\Controllers\PriceCatalogController;
@@ -26,6 +27,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/nuevo-oficio', [NewOfficeController::class, 'index'])->name('oficios.index');
     Route::get('/nuevo-oficio/{category}', [NewOfficeController::class, 'show'])->whereNumber('category')->name('oficios.show');
     Route::post('/nuevo-oficio/{category}/precios', [NewOfficeController::class, 'save'])->whereNumber('category')->name('oficios.save');
+    Route::post('/nuevo-oficio/{category}/registrar', [NewOfficeController::class, 'submit'])->whereNumber('category')->name('oficios.submit');
+    Route::get('/nuevo-oficio/registros/{record}', [NewOfficeController::class, 'receipt'])->whereNumber('record')->name('oficios.receipt');
 
     Route::get('/catalogos', [PriceCatalogController::class, 'index'])->name('catalogos.index');
     Route::get('/catalogos/{category}', [PriceCatalogController::class, 'show'])->whereNumber('category')->name('catalogos.show');
@@ -56,4 +59,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/convocatorias/{convocation}/editar', [ConvocationController::class, 'edit'])->whereNumber('convocation')->name('convocatorias.edit');
     Route::put('/convocatorias/{convocation}', [ConvocationController::class, 'update'])->whereNumber('convocation')->name('convocatorias.update');
     Route::patch('/convocatorias/{convocation}/estado', [ConvocationController::class, 'toggle'])->whereNumber('convocation')->name('convocatorias.toggle');
+
+    Route::get('/enlaces-convocatoria', [ConvocationLinkController::class, 'index'])->name('enlaces.index');
+    Route::get('/enlaces-convocatoria/{convocation}/editar', [ConvocationLinkController::class, 'edit'])->whereNumber('convocation')->name('enlaces.edit');
+    Route::put('/enlaces-convocatoria/{convocation}', [ConvocationLinkController::class, 'update'])->whereNumber('convocation')->name('enlaces.update');
 });

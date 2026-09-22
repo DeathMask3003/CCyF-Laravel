@@ -9,7 +9,7 @@
 <div class="dashboard-grid">
     @php($ccyfMenu = app(\App\Services\LegacyMenu::class))
     @if ($ccyfMenu->allows(auth()->user(), 'NuevoOficio') || $ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
-        <article class="feature-card"><span class="feature-icon">01</span><h2>Nuevo oficio</h2><p>Captura precios de acuerdo con los productos vigentes en cada convocatoria.</p><a class="text-link" href="{{ route('oficios.index') }}">Ver convocatorias <span aria-hidden="true">→</span></a></article>
+        <article class="feature-card"><span class="feature-icon">01</span><h2>Nuevo registro</h2><p>Presenta la propuesta completa con precios, comentarios y documentos PDF.</p><a class="text-link" href="{{ route('oficios.index') }}">Iniciar registro <span aria-hidden="true">→</span></a></article>
     @endif
     @if ($ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
         <article class="feature-card"><span class="feature-icon">02</span><h2>Productos y precios</h2><p>Organiza los alimentos o servicios de fotocopiado que se solicitarán en cada convocatoria.</p><a class="text-link" href="{{ route('catalogos.index') }}">Administrar catálogos <span aria-hidden="true">→</span></a></article>
@@ -24,7 +24,10 @@
         <article class="feature-card"><span class="feature-icon">05</span><h2>Gestionar planteles</h2><p>Actualiza los planteles participantes y sus condiciones para cada tipo de servicio.</p><a class="text-link" href="{{ route('planteles.index') }}">Administrar planteles <span aria-hidden="true">→</span></a></article>
     @endif
     @if ($ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
-        <article class="feature-card"><span class="feature-icon">06</span><h2>Número de convocatoria</h2><p>Define el servicio y los planteles participantes de cada convocatoria.</p><a class="text-link" href="{{ route('convocatorias.index') }}">Administrar convocatorias <span aria-hidden="true">→</span></a></article>
+        <article class="feature-card"><span class="feature-icon">06</span><h2>Número de convocatoria</h2><p>Define el número, el servicio y el estado de cada convocatoria.</p><a class="text-link" href="{{ route('convocatorias.index') }}">Administrar convocatorias <span aria-hidden="true">→</span></a></article>
+    @endif
+    @if ($ccyfMenu->allows(auth()->user(), 'Subcategorias_widi'))
+        <article class="feature-card"><span class="feature-icon">07</span><h2>Enlaces para convocatoria</h2><p>Selecciona los planteles y CEMSaD autorizados para participar en cada convocatoria.</p><a class="text-link" href="{{ route('enlaces.index') }}">Administrar enlaces <span aria-hidden="true">→</span></a></article>
     @endif
 </div>
 @endsection

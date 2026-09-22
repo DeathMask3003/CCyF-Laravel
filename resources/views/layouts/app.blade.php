@@ -21,17 +21,19 @@
                 @php($canServices = $ccyfMenu->allows(auth()->user(), 'Asuntos'))
                 @php($canCampuses = $ccyfMenu->allows(auth()->user(), 'Areas'))
                 @php($canConvocations = $ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
+                @php($canLinks = $ccyfMenu->allows(auth()->user(), 'Subcategorias_widi'))
                 <nav class="main-nav" aria-label="Menú principal">
                     <a href="{{ route('dashboard') }}" @class(['active' => request()->routeIs('dashboard')])>Inicio</a>
                     @if ($ccyfMenu->allows(auth()->user(), 'NuevoOficio') || $canProducts)
-                        <a href="{{ route('oficios.index') }}" @class(['active' => request()->routeIs('oficios.*')])>Nuevo oficio</a>
+                        <a href="{{ route('oficios.index') }}" @class(['active' => request()->routeIs('oficios.*')])>Nuevo registro</a>
                     @endif
-                    @if ($canProducts || $canTypes || $canServices || $canCampuses || $canConvocations)
+                    @if ($canProducts || $canTypes || $canServices || $canCampuses || $canConvocations || $canLinks)
                         <details class="nav-dropdown">
-                            <summary @class(['active' => request()->routeIs('catalogos.*', 'tipos.*', 'servicios.*', 'planteles.*', 'convocatorias.*')])>Catálogos <span aria-hidden="true">⌄</span></summary>
+                            <summary @class(['active' => request()->routeIs('catalogos.*', 'tipos.*', 'servicios.*', 'planteles.*', 'convocatorias.*', 'enlaces.*')])>Catálogos <span aria-hidden="true">⌄</span></summary>
                             <div class="nav-dropdown-menu">
                                 @if ($canCampuses)<a href="{{ route('planteles.index') }}" @class(['active' => request()->routeIs('planteles.*')])>Gestionar planteles</a>@endif
                                 @if ($canConvocations)<a href="{{ route('convocatorias.index') }}" @class(['active' => request()->routeIs('convocatorias.*')])>Número de convocatoria</a>@endif
+                                @if ($canLinks)<a href="{{ route('enlaces.index') }}" @class(['active' => request()->routeIs('enlaces.*')])>Enlaces para convocatoria</a>@endif
                                 @if ($canProducts)<a href="{{ route('catalogos.index') }}" @class(['active' => request()->routeIs('catalogos.*')])>Productos y precios</a>@endif
                                 @if ($canTypes)<a href="{{ route('tipos.index') }}" @class(['active' => request()->routeIs('tipos.*')])>Tipo de documento</a>@endif
                                 @if ($canServices)<a href="{{ route('servicios.index') }}" @class(['active' => request()->routeIs('servicios.*')])>Tipos de servicios</a>@endif
