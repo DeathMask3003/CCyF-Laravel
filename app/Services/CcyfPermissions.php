@@ -9,6 +9,8 @@ class CcyfPermissions
         'gestionOficio' => 'Convocatorias pendientes',
         'buscarOficio' => 'Convocatorias finalizadas',
         'seguimiento_permisionarios' => 'Seguimiento de permisionarios',
+        'prevaluacion' => 'Prevaluar documentación',
+        'Prevaluaciones_admin' => 'Observaciones de prevaluación',
         'Categorias_widi' => 'Número de convocatoria y precios',
         'Subcategorias_widi' => 'Enlaces para convocatoria',
         'Areas' => 'Gestionar planteles',
@@ -22,8 +24,9 @@ class CcyfPermissions
     {
         return [
             'Convocatorias' => array_slice(self::MODULES, 0, 4, true),
-            'Catálogos' => array_slice(self::MODULES, 4, 5, true),
-            'Administración' => array_slice(self::MODULES, 9, 2, true),
+            'Prevaluaciones' => array_slice(self::MODULES, 4, 2, true),
+            'Catálogos' => array_slice(self::MODULES, 6, 5, true),
+            'Administración' => array_slice(self::MODULES, 11, 2, true),
         ];
     }
 }

@@ -15,6 +15,7 @@ use App\Http\Controllers\LocationController;
 use App\Http\Controllers\PriceCatalogController;
 use App\Http\Controllers\PermitTrackingController;
 use App\Http\Controllers\PermitTrackingExportController;
+use App\Http\Controllers\PrevaluationController;
 use App\Http\Controllers\ServiceTypeController;
 use Illuminate\Support\Facades\Route;
 
@@ -60,6 +61,11 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/seguimiento-permisionarios/{key}/archivos/{number}', [PermitTrackingController::class, 'file'])->whereNumber('number')->name('seguimiento.file');
     Route::get('/seguimiento-permisionarios/{key}/expediente', [PermitTrackingController::class, 'zip'])->name('seguimiento.zip');
     Route::get('/seguimiento-permisionarios/exportar/{format}', [PermitTrackingExportController::class, 'download'])->whereIn('format', ['pdf', 'xlsx', 'csv'])->name('seguimiento.export');
+
+    Route::get('/prevaluaciones', [PrevaluationController::class, 'index'])->name('prevaluaciones.index');
+    Route::put('/prevaluaciones/{key}', [PrevaluationController::class, 'save'])->name('prevaluaciones.save');
+    Route::put('/prevaluaciones/{key}/observaciones', [PrevaluationController::class, 'note'])->name('prevaluaciones.note');
+    Route::get('/prevaluaciones/{key}/documentos/{field}', [PrevaluationController::class, 'file'])->name('prevaluaciones.file');
 
     Route::get('/catalogos', [PriceCatalogController::class, 'index'])->name('catalogos.index');
     Route::get('/catalogos/{category}', [PriceCatalogController::class, 'show'])->whereNumber('category')->name('catalogos.show');
