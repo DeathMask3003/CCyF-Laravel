@@ -28,6 +28,7 @@
                 @php($canTracking = $ccyfMenu->allows(auth()->user(), 'seguimiento_permisionarios'))
                 @php($canPreval = $ccyfMenu->allows(auth()->user(), 'prevaluacion') || $ccyfMenu->allows(auth()->user(), 'Prevaluaciones_admin'))
                 @php($canDocumentAdmin = $ccyfMenu->allows(auth()->user(), 'actualiza_docs'))
+                @php($canContracts = $ccyfMenu->allows(auth()->user(), 'Permisionarios_aceptados_vujeig'))
                 @php($canUsers = $ccyfMenu->allows(auth()->user(), 'Usuarios'))
                 @php($canRoles = $ccyfMenu->allows(auth()->user(), 'Rol'))
                 <nav class="main-nav" aria-label="Menú principal">
@@ -40,6 +41,7 @@
                     @if ($canTracking)<a href="{{ route('seguimiento.index') }}" @class(['active' => request()->routeIs('seguimiento.*')])>Seguimiento</a>@endif
                     @if ($canPreval)<a href="{{ route('prevaluaciones.index') }}" @class(['active' => request()->routeIs('prevaluaciones.*')])>Prevaluaciones</a>@endif
                     @if ($canDocumentAdmin)<a href="{{ route('documentacion.index') }}" @class(['active' => request()->routeIs('documentacion.*')])>Documentación</a>@endif
+                    @if ($canContracts)<a href="{{ route('contratos.index') }}" @class(['active' => request()->routeIs('contratos.*')])>Contratos</a>@endif
                     @if ($canProducts || $canTypes || $canServices || $canCampuses || $canConvocations || $canLinks)
                         <details class="nav-dropdown">
                             <summary @class(['active' => request()->routeIs('catalogos.*', 'tipos.*', 'servicios.*', 'planteles.*', 'convocatorias.*', 'enlaces.*')])>Catálogos <span aria-hidden="true">⌄</span></summary>

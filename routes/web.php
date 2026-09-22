@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AccessController;
+use App\Http\Controllers\AcceptedProposalController;
 use App\Http\Controllers\CampusController;
 use App\Http\Controllers\ConvocationController;
 use App\Http\Controllers\ConvocationLinkController;
@@ -35,6 +36,23 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::put('/mi-perfil', [ProfileController::class, 'update'])->name('perfil.update');
     Route::put('/mi-perfil/contrasena', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('perfil.password');
     Route::get('/ubicaciones', [LocationController::class, 'index'])->name('ubicaciones.index');
+
+    Route::get('/contratos-permisionarios', [AcceptedProposalController::class, 'index'])->name('contratos.index');
+    Route::post('/contratos-permisionarios/enviar-seleccionados', [AcceptedProposalController::class, 'sendBulk'])
+        ->middleware('throttle:3,1')->name('contratos.send-bulk');
+    Route::get('/contratos-permisionarios/plantilla/{service}', [AcceptedProposalController::class, 'template'])
+        ->name('contratos.template');
+    Route::post('/contratos-permisionarios/plantilla/{service}', [AcceptedProposalController::class, 'saveTemplate'])
+        ->name('contratos.template.save');
+    Route::get('/contratos-permisionarios/{key}', [AcceptedProposalController::class, 'show'])->name('contratos.show');
+    Route::put('/contratos-permisionarios/{key}/datos', [AcceptedProposalController::class, 'saveTerms'])
+        ->name('contratos.terms');
+    Route::get('/contratos-permisionarios/{key}/borrador', [AcceptedProposalController::class, 'preview'])
+        ->name('contratos.preview');
+    Route::get('/contratos-permisionarios/{key}/enviado', [AcceptedProposalController::class, 'sentPdf'])
+        ->name('contratos.sent-pdf');
+    Route::post('/contratos-permisionarios/{key}/enviar', [AcceptedProposalController::class, 'send'])
+        ->middleware('throttle:3,1')->name('contratos.send');
     Route::post('/ubicaciones', [LocationController::class, 'store'])->middleware('throttle:10,1')->name('ubicaciones.store');
 
     Route::get('/actualizacion-documentacion', [DocumentUpdateController::class, 'index'])->name('documentacion.index');
