@@ -8,7 +8,7 @@
 <div class="list-grid">
     @forelse ($catalogs as $catalog)
         @php($category = $categories->get($catalog->legacy_cat_id))
-        <article class="list-card"><div class="list-card-top"><span class="pill pill-ready">{{ $catalog->tipo === 'cafeteria' ? 'Cafetería' : 'Fotocopiado' }}</span><span class="muted">#{{ $category->cat_id }}</span></div><h2>{{ $category->cat_nom }}</h2><p>Formulario de precios de esta convocatoria.</p><a class="text-link" href="{{ route('oficios.show', $category->cat_id) }}">{{ $canSave ? 'Capturar precios' : 'Vista previa' }} <span aria-hidden="true">→</span></a></article>
+        <article class="list-card"><div class="list-card-top"><span class="pill pill-ready">{{ $catalog->servicio_nombre }}</span><span class="muted">#{{ $category->cat_id }}</span></div><h2>{{ $category->cat_nom }}</h2><p>Formulario de precios de esta convocatoria.</p><a class="text-link" href="{{ route('oficios.show', $category->cat_id) }}">{{ $canSave ? 'Capturar precios' : 'Vista previa' }} <span aria-hidden="true">→</span></a></article>
     @empty
         <div class="empty-state">Aún no hay catálogos configurados para convocatorias vigentes.</div>
     @endforelse

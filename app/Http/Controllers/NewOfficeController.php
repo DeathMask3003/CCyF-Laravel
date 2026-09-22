@@ -17,8 +17,10 @@ class NewOfficeController extends Controller
         $this->authorizeView($request, $menu);
         $categories = DB::connection('legacy')->table('tm_categoria_widi')
             ->where('est', 1)->get(['cat_id', 'cat_nom'])->keyBy('cat_id');
-        $catalogs = DB::table('ccyf_catalogos')->whereIn('legacy_cat_id', $categories->keys())
-            ->orderByDesc('legacy_cat_id')->get();
+        $catalogs = DB::table('ccyf_catalogos')
+            ->join('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'ccyf_catalogos.servicio_id')
+            ->where('servicio.activo', true)->whereIn('legacy_cat_id', $categories->keys())
+            ->orderByDesc('legacy_cat_id')->get(['ccyf_catalogos.*', 'servicio.nombre as servicio_nombre']);
         $canSave = $menu->allows($request->user(), 'NuevoOficio');
 
         return view('oficios.index', compact('categories', 'catalogs', 'canSave'));
@@ -30,7 +32,10 @@ class NewOfficeController extends Controller
         $legacy = DB::connection('legacy')->table('tm_categoria_widi')
             ->where('cat_id', $category)->where('est', 1)->first(['cat_id', 'cat_nom']);
         abort_unless($legacy, 404);
-        $catalog = DB::table('ccyf_catalogos')->where('legacy_cat_id', $category)->first();
+        $catalog = DB::table('ccyf_catalogos')
+            ->join('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'ccyf_catalogos.servicio_id')
+            ->where('servicio.activo', true)->where('legacy_cat_id', $category)
+            ->first(['ccyf_catalogos.*', 'servicio.nombre as servicio_nombre']);
         abort_unless($catalog, 404);
         $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog->id)
             ->where('activo', true)->orderBy('orden')->orderBy('id')->get();
@@ -51,7 +56,10 @@ class NewOfficeController extends Controller
         $legacy = DB::connection('legacy')->table('tm_categoria_widi')
             ->where('cat_id', $category)->where('est', 1)->exists();
         abort_unless($legacy, 404);
-        $catalog = DB::table('ccyf_catalogos')->where('legacy_cat_id', $category)->first();
+        $catalog = DB::table('ccyf_catalogos')
+            ->join('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'ccyf_catalogos.servicio_id')
+            ->where('servicio.activo', true)->where('legacy_cat_id', $category)
+            ->first(['ccyf_catalogos.*']);
         abort_unless($catalog, 404);
         $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog->id)
             ->where('activo', true)->orderBy('orden')->get();

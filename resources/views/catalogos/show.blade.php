@@ -9,13 +9,13 @@
 @if (! $catalog)
     <section class="panel narrow-panel"><span class="eyebrow">Paso inicial</span><h2>Preparar catálogo</h2><p class="muted">Empezaremos con los productos que ya utiliza CCyF. Podrás modificar, agregar o retirar cualquiera de ellos.</p>
         <form method="post" action="{{ route('catalogos.prepare', $legacy->cat_id) }}">@csrf
-            <label for="tipo">Servicio de esta convocatoria</label>
-            <select id="tipo" name="tipo" required><option value="">Selecciona el servicio</option><option value="cafeteria" @selected(old('tipo', $suggestedType) === 'cafeteria')>Cafetería</option><option value="fotocopiado" @selected(old('tipo', $suggestedType) === 'fotocopiado')>Fotocopiado</option></select>
+            <label for="servicio">Tipo de servicio de esta convocatoria</label>
+            <select id="servicio" name="servicio_id" required><option value="">Selecciona el servicio</option>@foreach ($services as $service)<option value="{{ $service->id }}" @selected((string) old('servicio_id', $suggestedServiceId) === (string) $service->id)>{{ $service->nombre }}</option>@endforeach</select>
             <button class="button" type="submit">Crear catálogo</button>
         </form>
     </section>
 @else
-    <div class="section-bar"><div><span class="eyebrow">{{ $catalog->tipo === 'cafeteria' ? 'Cafetería' : 'Fotocopiado' }}</span><h2>Lista de productos</h2></div><span class="pill pill-neutral">{{ $products->where('activo', 1)->count() }} activos</span></div>
+    <div class="section-bar"><div><span class="eyebrow">{{ $catalog->servicio_nombre ?: 'Tipo de servicio' }}</span><h2>Lista de productos</h2></div><span class="pill pill-neutral">{{ $products->where('activo', 1)->count() }} activos</span></div>
     <section class="panel"><div class="table-scroll"><table class="product-table"><thead><tr><th>Producto o servicio</th><th>Unidad</th><th>Orden</th><th>Visible</th><th></th></tr></thead><tbody>
         @foreach ($products as $product)
             <tr @class(['inactive-row' => ! $product->activo])><td colspan="5"><form class="product-row" method="post" action="{{ route('catalogos.products.update', [$legacy->cat_id, $product->id]) }}">@csrf @method('PUT')

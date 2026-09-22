@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AccessController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\NewOfficeController;
 use App\Http\Controllers\PriceCatalogController;
+use App\Http\Controllers\ServiceTypeController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/panel');
@@ -34,4 +35,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/tipos-documento', [DocumentTypeController::class, 'store'])->name('tipos.store');
     Route::put('/tipos-documento/{type}', [DocumentTypeController::class, 'update'])->whereNumber('type')->name('tipos.update');
     Route::patch('/tipos-documento/{type}/estado', [DocumentTypeController::class, 'toggle'])->whereNumber('type')->name('tipos.toggle');
+
+    Route::get('/tipos-servicios', [ServiceTypeController::class, 'index'])->name('servicios.index');
+    Route::post('/tipos-servicios', [ServiceTypeController::class, 'store'])->name('servicios.store');
+    Route::put('/tipos-servicios/{service}', [ServiceTypeController::class, 'update'])->whereNumber('service')->name('servicios.update');
+    Route::patch('/tipos-servicios/{service}/estado', [ServiceTypeController::class, 'toggle'])->whereNumber('service')->name('servicios.toggle');
 });

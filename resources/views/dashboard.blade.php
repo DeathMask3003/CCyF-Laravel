@@ -17,5 +17,8 @@
     @if ($ccyfMenu->allows(auth()->user(), 'Tipo'))
         <article class="feature-card"><span class="feature-icon">03</span><h2>Tipo de documento</h2><p>Define los tipos disponibles al preparar un nuevo oficio y conserva los anteriores para consulta.</p><a class="text-link" href="{{ route('tipos.index') }}">Administrar tipos <span aria-hidden="true">→</span></a></article>
     @endif
+    @if ($ccyfMenu->allows(auth()->user(), 'Asuntos'))
+        <article class="feature-card"><span class="feature-icon">04</span><h2>Tipos de servicios</h2><p>Administra los servicios de las convocatorias y su descripción para los nuevos registros.</p><a class="text-link" href="{{ route('servicios.index') }}">Administrar servicios <span aria-hidden="true">→</span></a></article>
+    @endif
 </div>
 @endsection

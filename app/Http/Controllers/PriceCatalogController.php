@@ -19,8 +19,9 @@ class PriceCatalogController extends Controller
         $categories = DB::connection('legacy')->table('tm_categoria_widi')
             ->where('est', 1)->orderByDesc('cat_id')->get(['cat_id', 'cat_nom']);
         $configured = DB::table('ccyf_catalogos')
+            ->leftJoin('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'ccyf_catalogos.servicio_id')
             ->whereIn('legacy_cat_id', $categories->pluck('cat_id'))
-            ->get()->keyBy('legacy_cat_id');
+            ->get(['ccyf_catalogos.*', 'servicio.nombre as servicio_nombre'])->keyBy('legacy_cat_id');
 
         return view('catalogos.index', compact('categories', 'configured'));
     }
@@ -31,20 +32,24 @@ class PriceCatalogController extends Controller
         $legacy = $catalogs->legacyCategory($category);
         abort_unless($legacy, 404);
 
-        $catalog = DB::table('ccyf_catalogos')->where('legacy_cat_id', $category)->first();
+        $catalog = DB::table('ccyf_catalogos')
+            ->leftJoin('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'ccyf_catalogos.servicio_id')
+            ->where('legacy_cat_id', $category)
+            ->first(['ccyf_catalogos.*', 'servicio.nombre as servicio_nombre']);
         $products = $catalog ? DB::table('ccyf_productos')->where('catalogo_id', $catalog->id)
             ->orderBy('orden')->orderBy('id')->get() : collect();
-        $suggestedType = $catalogs->suggestedType($category, (string) $legacy->cat_nom);
+        $services = DB::table('ccyf_tipos_servicio')->where('activo', true)->orderBy('nombre')->get();
+        $suggestedServiceId = $catalogs->suggestedServiceId($category, (string) $legacy->cat_nom);
 
-        return view('catalogos.show', compact('legacy', 'catalog', 'products', 'suggestedType'));
+        return view('catalogos.show', compact('legacy', 'catalog', 'products', 'services', 'suggestedServiceId'));
     }
 
     public function prepare(int $category, Request $request, LegacyMenu $menu, PriceCatalogs $catalogs): RedirectResponse
     {
         $this->authorizeCatalog($request, $menu);
         abort_unless($catalogs->legacyCategory($category, true), 404);
-        $data = $request->validate(['tipo' => ['required', 'in:cafeteria,fotocopiado']]);
-        $catalogs->prepare($category, $data['tipo']);
+        $data = $request->validate(['servicio_id' => ['required', 'integer']]);
+        $catalogs->prepare($category, (int) $data['servicio_id']);
 
         return redirect()->route('catalogos.show', $category)->with('status', 'Catálogo preparado. Puedes ajustar sus productos.');
     }

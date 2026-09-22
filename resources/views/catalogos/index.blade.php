@@ -10,7 +10,7 @@
         <article class="list-card">
             <div class="list-card-top"><span class="pill {{ $catalog ? 'pill-ready' : 'pill-pending' }}">{{ $catalog ? 'Configurado' : 'Por configurar' }}</span><span class="muted">#{{ $category->cat_id }}</span></div>
             <h2>{{ $category->cat_nom }}</h2>
-            <p>{{ $catalog ? ($catalog->tipo === 'cafeteria' ? 'Cafetería' : 'Fotocopiado') : 'Selecciona el servicio y revisa su lista inicial.' }}</p>
+            <p>{{ $catalog ? ($catalog->servicio_nombre ?: 'Servicio pendiente de vincular') : 'Selecciona el servicio y revisa su lista inicial.' }}</p>
             <a class="text-link" href="{{ route('catalogos.show', $category->cat_id) }}">{{ $catalog ? 'Administrar productos' : 'Preparar catálogo' }} <span aria-hidden="true">→</span></a>
         </article>
     @empty

@@ -16,16 +16,23 @@
             </a>
             @auth
                 @php($ccyfMenu = app(\App\Services\LegacyMenu::class))
+                @php($canProducts = $ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
+                @php($canTypes = $ccyfMenu->allows(auth()->user(), 'Tipo'))
+                @php($canServices = $ccyfMenu->allows(auth()->user(), 'Asuntos'))
                 <nav class="main-nav" aria-label="Menú principal">
                     <a href="{{ route('dashboard') }}" @class(['active' => request()->routeIs('dashboard')])>Inicio</a>
-                    @if ($ccyfMenu->allows(auth()->user(), 'NuevoOficio') || $ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
+                    @if ($ccyfMenu->allows(auth()->user(), 'NuevoOficio') || $canProducts)
                         <a href="{{ route('oficios.index') }}" @class(['active' => request()->routeIs('oficios.*')])>Nuevo oficio</a>
                     @endif
-                    @if ($ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
-                        <a href="{{ route('catalogos.index') }}" @class(['active' => request()->routeIs('catalogos.*')])>Productos y precios</a>
-                    @endif
-                    @if ($ccyfMenu->allows(auth()->user(), 'Tipo'))
-                        <a href="{{ route('tipos.index') }}" @class(['active' => request()->routeIs('tipos.*')])>Tipo de documento</a>
+                    @if ($canProducts || $canTypes || $canServices)
+                        <details class="nav-dropdown">
+                            <summary @class(['active' => request()->routeIs('catalogos.*', 'tipos.*', 'servicios.*')])>Catálogos <span aria-hidden="true">⌄</span></summary>
+                            <div class="nav-dropdown-menu">
+                                @if ($canProducts)<a href="{{ route('catalogos.index') }}" @class(['active' => request()->routeIs('catalogos.*')])>Productos y precios</a>@endif
+                                @if ($canTypes)<a href="{{ route('tipos.index') }}" @class(['active' => request()->routeIs('tipos.*')])>Tipo de documento</a>@endif
+                                @if ($canServices)<a href="{{ route('servicios.index') }}" @class(['active' => request()->routeIs('servicios.*')])>Tipos de servicios</a>@endif
+                            </div>
+                        </details>
                     @endif
                 </nav>
                 <div class="header-account">

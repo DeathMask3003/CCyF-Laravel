@@ -4,7 +4,7 @@
 
 @section('content')
 <a class="back-link" href="{{ route('oficios.index') }}">← Nuevo oficio</a>
-<div class="page-heading"><div><span class="eyebrow">{{ $catalog->tipo === 'cafeteria' ? 'Cafetería' : 'Fotocopiado' }} · Convocatoria #{{ $legacy->cat_id }}</span><h1>{{ $legacy->cat_nom }}</h1><p>Precios por producto de esta convocatoria.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">{{ $catalog->servicio_nombre }} · Convocatoria #{{ $legacy->cat_id }}</span><h1>{{ $legacy->cat_nom }}</h1><p>Precios por producto de esta convocatoria.</p></div></div>
 @if ($errors->any()) <div class="form-errors" role="alert"><strong>Revisa los precios:</strong><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div> @endif
 @unless ($canSave) <div class="info-strip">Vista previa del formulario. El guardado está disponible para las cuentas con permiso de Nuevo Oficio.</div> @endunless
 <section class="panel price-panel"><div class="section-bar"><div><span class="eyebrow">Lista vigente</span><h2>Precios ofrecidos</h2></div><span class="pill pill-neutral">{{ $products->count() }} productos</span></div>
