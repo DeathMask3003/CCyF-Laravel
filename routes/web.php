@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Auth\AccessController;
+use App\Http\Controllers\NewOfficeController;
+use App\Http\Controllers\PriceCatalogController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/panel');
@@ -16,4 +18,14 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::get('/panel', fn () => view('dashboard'))->name('dashboard');
     Route::post('/salir', [AccessController::class, 'destroy'])->name('logout');
+
+    Route::get('/nuevo-oficio', [NewOfficeController::class, 'index'])->name('oficios.index');
+    Route::get('/nuevo-oficio/{category}', [NewOfficeController::class, 'show'])->whereNumber('category')->name('oficios.show');
+    Route::post('/nuevo-oficio/{category}/precios', [NewOfficeController::class, 'save'])->whereNumber('category')->name('oficios.save');
+
+    Route::get('/catalogos', [PriceCatalogController::class, 'index'])->name('catalogos.index');
+    Route::get('/catalogos/{category}', [PriceCatalogController::class, 'show'])->whereNumber('category')->name('catalogos.show');
+    Route::post('/catalogos/{category}', [PriceCatalogController::class, 'prepare'])->whereNumber('category')->name('catalogos.prepare');
+    Route::post('/catalogos/{category}/productos', [PriceCatalogController::class, 'storeProduct'])->whereNumber('category')->name('catalogos.products.store');
+    Route::put('/catalogos/{category}/productos/{product}', [PriceCatalogController::class, 'updateProduct'])->whereNumber(['category', 'product'])->name('catalogos.products.update');
 });
