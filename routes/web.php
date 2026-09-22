@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AccessController;
+use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\NewOfficeController;
 use App\Http\Controllers\PriceCatalogController;
 use Illuminate\Support\Facades\Route;
@@ -28,4 +29,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/catalogos/{category}', [PriceCatalogController::class, 'prepare'])->whereNumber('category')->name('catalogos.prepare');
     Route::post('/catalogos/{category}/productos', [PriceCatalogController::class, 'storeProduct'])->whereNumber('category')->name('catalogos.products.store');
     Route::put('/catalogos/{category}/productos/{product}', [PriceCatalogController::class, 'updateProduct'])->whereNumber(['category', 'product'])->name('catalogos.products.update');
+
+    Route::get('/tipos-documento', [DocumentTypeController::class, 'index'])->name('tipos.index');
+    Route::post('/tipos-documento', [DocumentTypeController::class, 'store'])->name('tipos.store');
+    Route::put('/tipos-documento/{type}', [DocumentTypeController::class, 'update'])->whereNumber('type')->name('tipos.update');
+    Route::patch('/tipos-documento/{type}/estado', [DocumentTypeController::class, 'toggle'])->whereNumber('type')->name('tipos.toggle');
 });

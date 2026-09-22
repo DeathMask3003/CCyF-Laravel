@@ -14,5 +14,8 @@
     @if ($ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
         <article class="feature-card"><span class="feature-icon">02</span><h2>Productos y precios</h2><p>Organiza los alimentos o servicios de fotocopiado que se solicitarán en cada convocatoria.</p><a class="text-link" href="{{ route('catalogos.index') }}">Administrar catálogos <span aria-hidden="true">→</span></a></article>
     @endif
+    @if ($ccyfMenu->allows(auth()->user(), 'Tipo'))
+        <article class="feature-card"><span class="feature-icon">03</span><h2>Tipo de documento</h2><p>Define los tipos disponibles al preparar un nuevo oficio y conserva los anteriores para consulta.</p><a class="text-link" href="{{ route('tipos.index') }}">Administrar tipos <span aria-hidden="true">→</span></a></article>
+    @endif
 </div>
 @endsection

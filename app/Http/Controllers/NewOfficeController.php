@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class NewOfficeController extends Controller
@@ -37,9 +38,11 @@ class NewOfficeController extends Controller
             ->where('usu_id', $request->user()->getKey())->first();
         $saved = $draft ? DB::table('ccyf_precio_borrador_detalles')
             ->where('borrador_id', $draft->id)->pluck('precio', 'producto_id') : collect();
+        $documentTypes = DB::table('ccyf_tipos_documento')->where('activo', true)
+            ->orderBy('nombre')->get(['id', 'nombre']);
         $canSave = $menu->allows($request->user(), 'NuevoOficio');
 
-        return view('oficios.show', compact('legacy', 'catalog', 'products', 'saved', 'canSave'));
+        return view('oficios.show', compact('legacy', 'catalog', 'products', 'saved', 'draft', 'documentTypes', 'canSave'));
     }
 
     public function save(int $category, Request $request, LegacyMenu $menu): RedirectResponse
@@ -55,6 +58,7 @@ class NewOfficeController extends Controller
         abort_if($products->isEmpty(), 422, 'Esta convocatoria no tiene productos activos.');
 
         $data = Validator::make($request->all(), [
+            'tipo_documento_id' => ['required', 'integer', Rule::exists('ccyf_tipos_documento', 'id')->where('activo', true)],
             'precios' => ['required', 'array'],
             'precios.*' => ['required', 'numeric', 'between:0,99999999.99', 'decimal:0,2'],
         ])->validate();
@@ -70,6 +74,7 @@ class NewOfficeController extends Controller
             $where = ['catalogo_id' => $catalog->id, 'usu_id' => $request->user()->getKey()];
             $draft = DB::table('ccyf_precio_borradores')->where($where)->first();
             $draftId = $draft?->id ?? DB::table('ccyf_precio_borradores')->insertGetId($where + [
+                'tipo_documento_id' => $data['tipo_documento_id'],
                 'created_at' => now(), 'updated_at' => now(),
             ]);
             DB::table('ccyf_precio_borrador_detalles')->where('borrador_id', $draftId)->delete();
@@ -84,7 +89,10 @@ class NewOfficeController extends Controller
                     'updated_at' => now(),
                 ]);
             }
-            DB::table('ccyf_precio_borradores')->where('id', $draftId)->update(['updated_at' => now()]);
+            DB::table('ccyf_precio_borradores')->where('id', $draftId)->update([
+                'tipo_documento_id' => $data['tipo_documento_id'],
+                'updated_at' => now(),
+            ]);
         });
 
         return back()->with('status', 'Borrador de precios guardado. Podrás continuar con los documentos cuando terminemos el registro.');

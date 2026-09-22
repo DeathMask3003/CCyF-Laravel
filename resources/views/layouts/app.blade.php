@@ -24,6 +24,9 @@
                     @if ($ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
                         <a href="{{ route('catalogos.index') }}" @class(['active' => request()->routeIs('catalogos.*')])>Productos y precios</a>
                     @endif
+                    @if ($ccyfMenu->allows(auth()->user(), 'Tipo'))
+                        <a href="{{ route('tipos.index') }}" @class(['active' => request()->routeIs('tipos.*')])>Tipo de documento</a>
+                    @endif
                 </nav>
                 <div class="header-account">
                     <span title="{{ auth()->user()->usu_area }}">{{ auth()->user()->usu_area }}</span>
