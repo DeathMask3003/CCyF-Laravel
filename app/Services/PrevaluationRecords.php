@@ -14,7 +14,8 @@ class PrevaluationRecords
         $legacyEvaluations = collect();
         foreach (['cafeteria' => ['tm_preval_cafe_doc', 'id_preval_cafe'], 'fotocopiado' => ['tm_preval_foto_doc', 'id_preval_foto']] as $service => [$table, $id]) {
             $latest = DB::connection('legacy')->table($table)->where('est', 1)->where('campo_doc', '<>', 'observaciones_admin')
-                ->orderByDesc($id)->get(['doc_id', 'usu_preval', 'viable_estado', 'fecha_registro'])->unique('doc_id');
+                ->orderByRaw('viable_estado IS NULL ASC')->orderByDesc($id)
+                ->get(['doc_id', 'usu_preval', 'viable_estado', 'fecha_registro'])->unique('doc_id');
             foreach ($latest as $evaluation) {
                 $legacyEvaluations->put($evaluation->doc_id, $evaluation);
             }
@@ -37,8 +38,9 @@ class PrevaluationRecords
                     'plantel' => $item->doc_exter, 'nombre' => $account?->usu_area ?: $item->usu_area,
                     'curp' => $account?->curp ?: $item->ine, 'telefono' => $account?->usu_telf ?: $item->usu_telf,
                     'registro_at' => $item->fech_crea, 'estado' => $item->doc_estado,
-                    'evaluado' => (bool) ($local || $legacy),
+                    'evaluado' => ($local?->resultado ?? $legacy?->viable_estado) !== null,
                     'resultado' => $local?->resultado ?? $legacy?->viable_estado,
+                    'owner' => $local?->evaluador_id ?? $legacy?->usu_preval,
                 ];
             });
 
@@ -60,7 +62,8 @@ class PrevaluationRecords
                     'plantel' => $item->plantel, 'nombre' => $item->solicitante ?: $item->usu_area,
                     'curp' => $item->curp, 'telefono' => $item->usu_telf,
                     'registro_at' => $item->enviado_at, 'estado' => $item->estado,
-                    'evaluado' => (bool) $evaluation, 'resultado' => $evaluation?->resultado,
+                    'evaluado' => $evaluation?->resultado !== null, 'resultado' => $evaluation?->resultado,
+                    'owner' => $evaluation?->evaluador_id,
                 ];
             });
 

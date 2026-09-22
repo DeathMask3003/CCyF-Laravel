@@ -25,15 +25,30 @@ class PrevaluationController extends Controller
             'buscar' => ['nullable', 'string', 'max:150'],
             'estado' => ['nullable', Rule::in(['pendiente', 'evaluado'])],
             'registro' => ['nullable', 'regex:/^(historico|actual)-[1-9]\d*$/'],
+            'comparar' => ['nullable', Rule::in(['1'])],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $all = $records->all();
         $service = $request->query('servicio', 'cafeteria');
-        $filtered = $all->where('servicio', $service);
-        if ($request->filled('convocatoria')) $filtered = $filtered->where('convocatoria_id', (int) $request->query('convocatoria'));
-        if ($request->filled('plantel')) $filtered = $filtered->where('plantel', (string) $request->query('plantel'));
-        if ($request->filled('estado')) $filtered = $filtered->filter(fn ($item) => $item->evaluado === ($request->query('estado') === 'evaluado'));
+        $current = $this->currentCall($service, $all);
+        $isAdmin = $menu->allows($request->user(), 'Prevaluaciones_admin');
+        $isEvaluator = $menu->allows($request->user(), 'prevaluacion');
+        $showEvaluated = $isAdmin && $request->query('estado') === 'evaluado';
+        $userIds = $this->userIds($request);
+        $available = $all->filter(fn ($item) => $item->servicio === $service && $this->belongsToCall($item, $current));
+        $campuses = $current?->id ? DB::table('ccyf_convocatoria_planteles as link')
+            ->join('ccyf_planteles as p', 'p.id', '=', 'link.plantel_id')
+            ->where('link.convocatoria_id', $current->id)->orderBy('p.nombre')->pluck('p.nombre') : collect();
+        if ($campuses->isEmpty()) $campuses = $available->pluck('plantel')->filter()->unique()->sort()->values();
+        $available = $available->filter(fn ($item) => $campuses->contains($item->plantel));
+        $plantel = $campuses->contains($request->query('plantel')) ? $request->query('plantel') : null;
+        $filtered = $plantel ? $available->where('plantel', $plantel) : $available;
+        if ($isEvaluator && ! $isAdmin) {
+            $filtered = $filtered->filter(fn ($item) => ! $item->evaluado && (! $item->owner || in_array((int) $item->owner, $userIds, true)));
+        } else {
+            $filtered = $filtered->filter(fn ($item) => $item->evaluado === $showEvaluated);
+        }
         if ($request->filled('buscar')) {
             $term = mb_strtolower(trim((string) $request->query('buscar')));
             $filtered = $filtered->filter(fn ($item) => collect([$item->nombre, $item->curp, $item->plantel, $item->convocatoria, $item->registro_id])
@@ -42,28 +57,59 @@ class PrevaluationController extends Controller
         $filtered = $filtered->values();
         $page = max(1, LengthAwarePaginator::resolveCurrentPage());
         $rows = new LengthAwarePaginator($filtered->forPage($page, 20)->values(), $filtered->count(), 20, $page, [
-            'path' => $request->url(), 'query' => $request->query(),
+            'path' => $request->url(), 'query' => $request->except(['registro', 'comparar']),
         ]);
 
-        $selected = $request->filled('registro') ? $all->firstWhere('key', $request->query('registro')) : null;
+        $selected = $request->filled('registro') ? $available->firstWhere('key', $request->query('registro')) : null;
         if ($request->filled('registro')) abort_unless($selected, 404);
         $detail = $selected ? $records->detail($selected) : null;
-        $isAdmin = $menu->allows($request->user(), 'Prevaluaciones_admin');
-        $isEvaluator = $menu->allows($request->user(), 'prevaluacion');
-        $owner = $detail['owner'] ?? null;
-        $userLegacyId = (int) ($request->user()->legacy_usu_id ?: $request->user()->getKey());
-        $canEvaluate = $selected && $isEvaluator && (! $owner || $owner === $userLegacyId || $owner === (int) $request->user()->getKey());
-
-        $available = $all->where('servicio', $service);
-        $convocations = $available->unique('convocatoria_id')->sortByDesc('convocatoria_id')->values();
-        $campuses = $available->filter(fn ($item) => ! $request->filled('convocatoria') || $item->convocatoria_id === (int) $request->query('convocatoria'))
-            ->pluck('plantel')->filter()->unique()->sort()->values();
+        $canEvaluate = $selected && $isEvaluator && ! $selected->evaluado && $selected->owner
+            && in_array((int) $selected->owner, $userIds, true);
         $comparison = $selected ? $this->comparison($records, $all, $selected) : collect();
+        $priceAnalysis = $request->query('comparar') === '1' && $plantel
+            ? $this->priceAnalysis($records, $available->where('plantel', $plantel)) : null;
 
-        return view('prevaluaciones.index', compact('rows', 'selected', 'detail', 'service', 'convocations', 'campuses', 'comparison', 'isAdmin', 'canEvaluate') + [
-            'totalCafe' => $all->where('servicio', 'cafeteria')->count(),
-            'totalFoto' => $all->where('servicio', 'fotocopiado')->count(),
+        return view('prevaluaciones.index', compact('rows', 'selected', 'detail', 'service', 'current', 'campuses', 'plantel', 'comparison', 'priceAnalysis', 'isAdmin', 'isEvaluator', 'canEvaluate') + [
+            'totalCafe' => $this->visibleCount($all, 'cafeteria', $isAdmin, $showEvaluated, $userIds),
+            'totalFoto' => $this->visibleCount($all, 'fotocopiado', $isAdmin, $showEvaluated, $userIds),
         ]);
+    }
+
+    public function claim(string $key, Request $request, LegacyMenu $menu, PrevaluationRecords $records): RedirectResponse
+    {
+        abort_unless($menu->allows($request->user(), 'prevaluacion'), 403);
+        $record = $this->record($records, $key);
+        abort_unless($this->belongsToCall($record, $this->currentCall($record->servicio, $records->all())), 404);
+        abort_if($record->evaluado, 409, 'Este expediente ya fue prevaluado.');
+        abort_if($record->owner && ! in_array((int) $record->owner, $this->userIds($request), true),
+            409, 'Otro prevaluador ya tomó este expediente.');
+        DB::transaction(function () use ($record, $request): void {
+            DB::table('ccyf_prevaluaciones')->insertOrIgnore([
+                'origen' => $record->origen, 'registro_id' => $record->registro_id,
+                'evaluador_id' => $request->user()->getKey(), 'resultado' => null,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $claim = DB::table('ccyf_prevaluaciones')->where('origen', $record->origen)
+                ->where('registro_id', $record->registro_id)->lockForUpdate()->first();
+            abort_unless($claim && (int) $claim->evaluador_id === (int) $request->user()->getKey()
+                && $claim->resultado === null, 409, 'Otro prevaluador ya tomó o terminó este expediente.');
+        });
+        return redirect()->route('prevaluaciones.index', $this->returnQuery($request, $record));
+    }
+
+    public function release(string $key, Request $request, LegacyMenu $menu, PrevaluationRecords $records): RedirectResponse
+    {
+        abort_unless($menu->allows($request->user(), 'prevaluacion'), 403);
+        $record = $this->record($records, $key);
+        DB::transaction(function () use ($record, $request): void {
+            $claim = DB::table('ccyf_prevaluaciones')->where('origen', $record->origen)
+                ->where('registro_id', $record->registro_id)->lockForUpdate()->first();
+            abort_unless($claim && (int) $claim->evaluador_id === (int) $request->user()->getKey()
+                && $claim->resultado === null, 403);
+            DB::table('ccyf_prevaluaciones')->where('id', $claim->id)->delete();
+        });
+        return redirect()->route('prevaluaciones.index', $request->only(['servicio', 'plantel', 'buscar', 'page']))
+            ->with('status', 'Expediente liberado para otro prevaluador.');
     }
 
     public function save(string $key, Request $request, LegacyMenu $menu, PrevaluationRecords $records): RedirectResponse
@@ -71,9 +117,8 @@ class PrevaluationController extends Controller
         abort_unless($menu->allows($request->user(), 'prevaluacion'), 403);
         $record = $this->record($records, $key);
         $detail = $records->detail($record);
-        $owner = $detail['owner'];
-        $userLegacyId = (int) ($request->user()->legacy_usu_id ?: $request->user()->getKey());
-        abort_if($owner && $owner !== $userLegacyId && $owner !== (int) $request->user()->getKey(), 403);
+        abort_if($record->evaluado, 409, 'Este expediente ya fue prevaluado.');
+        abort_unless($record->owner && in_array((int) $record->owner, $this->userIds($request), true), 403);
 
         $allowed = $detail['documents']->pluck('clave')->merge($detail['prices']->pluck('clave'))->all();
         $data = $request->validate([
@@ -92,19 +137,11 @@ class PrevaluationController extends Controller
         }
 
         DB::transaction(function () use ($record, $request, $data): void {
-            $existing = DB::table('ccyf_prevaluaciones')->where('origen', $record->origen)->where('registro_id', $record->registro_id)->first();
-            if ($existing) {
-                $id = $existing->id;
-                DB::table('ccyf_prevaluaciones')->where('id', $id)->update([
-                    'resultado' => $data['resultado'] ?? null, 'updated_at' => now(),
-                ]);
-            } else {
-                $id = DB::table('ccyf_prevaluaciones')->insertGetId([
-                    'origen' => $record->origen, 'registro_id' => $record->registro_id,
-                    'evaluador_id' => $request->user()->getKey(), 'resultado' => $data['resultado'] ?? null,
-                    'created_at' => now(), 'updated_at' => now(),
-                ]);
-            }
+            $claim = DB::table('ccyf_prevaluaciones')->where('origen', $record->origen)
+                ->where('registro_id', $record->registro_id)->lockForUpdate()->first();
+            abort_unless($claim && (int) $claim->evaluador_id === (int) $request->user()->getKey()
+                && $claim->resultado === null, 409, 'La reserva cambió o el expediente ya terminó.');
+            $id = $claim->id;
             foreach ($data['items'] as $keyItem => $item) {
                 DB::table('ccyf_prevaluacion_items')->upsert(
                     [['prevaluacion_id' => $id, 'clave' => $keyItem,
@@ -114,9 +151,15 @@ class PrevaluationController extends Controller
                     ['prevaluacion_id', 'clave'], ['cumple', 'comentario', 'updated_at'],
                 );
             }
+            DB::table('ccyf_prevaluaciones')->where('id', $id)->update([
+                'resultado' => $data['resultado'] ?? null, 'updated_at' => now(),
+            ]);
         });
 
-        return redirect()->route('prevaluaciones.index', $this->returnQuery($request, $record))->with('status', 'Prevaluación guardada correctamente.');
+        $query = $this->returnQuery($request, $record);
+        if (isset($data['resultado'])) unset($query['registro']);
+        return redirect()->route('prevaluaciones.index', $query)->with('status',
+            isset($data['resultado']) ? 'Prevaluación finalizada.' : 'Avance guardado. El expediente sigue reservado para ti.');
     }
 
     public function note(string $key, Request $request, LegacyMenu $menu, PrevaluationRecords $records): RedirectResponse
@@ -162,6 +205,66 @@ class PrevaluationController extends Controller
             }
         }
         return $minimums;
+    }
+
+    private function currentCall(string $service, $all): ?object
+    {
+        $legacyService = $service === 'cafeteria' ? 3 : 4;
+        $call = DB::table('ccyf_convocatorias as c')->join('ccyf_tipos_servicio as s', 's.id', '=', 'c.servicio_id')
+            ->where('s.legacy_trami_id', $legacyService)
+            ->orderByDesc('c.activo')->orderByDesc('c.created_at')->orderByDesc('c.id')
+            ->first(['c.id', 'c.legacy_cat_id', 'c.numero', 'c.activo']);
+        if ($call) return $call;
+        $fallback = $all->where('servicio', $service)->sortByDesc('convocatoria_id')->first();
+        return $fallback ? (object) ['id' => $fallback->origen === 'actual' ? $fallback->convocatoria_id : null,
+            'legacy_cat_id' => $fallback->origen === 'historico' ? $fallback->convocatoria_id : null,
+            'numero' => $fallback->convocatoria, 'activo' => false] : null;
+    }
+
+    private function belongsToCall(object $item, ?object $call): bool
+    {
+        if (! $call) return false;
+        $id = $item->origen === 'historico' ? $call->legacy_cat_id : $call->id;
+        return $id !== null && (int) $item->convocatoria_id === (int) $id;
+    }
+
+    private function visibleCount($all, string $service, bool $isAdmin, bool $showEvaluated, array $userIds): int
+    {
+        $call = $this->currentCall($service, $all);
+        return $all->filter(fn ($item) => $item->servicio === $service && $this->belongsToCall($item, $call)
+            && ($isAdmin ? $item->evaluado === $showEvaluated
+                : (! $item->evaluado && (! $item->owner || in_array((int) $item->owner, $userIds, true)))))->count();
+    }
+
+    private function userIds(Request $request): array
+    {
+        return array_values(array_unique(array_filter([(int) $request->user()->getKey(), (int) $request->user()->legacy_usu_id])));
+    }
+
+    private function priceAnalysis(PrevaluationRecords $records, $peers): array
+    {
+        $offers = collect();
+        $participants = $peers->map(function ($peer) use ($records, $offers): array {
+            $prices = collect();
+            foreach ($records->prices($peer) as $price) {
+                if (! is_numeric($price->precio) || (float) $price->precio < 0) continue;
+                $prices[$price->nombre] = (float) $price->precio;
+                $offers->push(['item' => $price->nombre, 'price' => (float) $price->precio,
+                    'participant' => $peer->nombre ?: 'Sin nombre']);
+            }
+            return ['name' => $peer->nombre ?: 'Sin nombre', 'key' => $peer->key,
+                'total' => $prices->sum(), 'count' => $prices->count()];
+        });
+        $items = $offers->groupBy('item')->map(function ($rows, $name): array {
+            $minimum = $rows->min('price');
+            return ['name' => $name, 'minimum' => $minimum,
+                'winners' => $rows->where('price', $minimum)->pluck('participant')->unique()->values()];
+        })->sortKeys()->values();
+        $expected = $items->count();
+        $ranked = $participants->map(fn ($row) => $row + ['complete' => $expected > 0 && $row['count'] === $expected])
+            ->sort(fn ($a, $b) => ($b['complete'] <=> $a['complete']) ?: ($a['total'] <=> $b['total']) ?: strcmp($a['name'], $b['name']))
+            ->values();
+        return ['participants' => $ranked, 'items' => $items, 'expected' => $expected];
     }
 
     private function returnQuery(Request $request, object $record): array

@@ -63,6 +63,8 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/seguimiento-permisionarios/exportar/{format}', [PermitTrackingExportController::class, 'download'])->whereIn('format', ['pdf', 'xlsx', 'csv'])->name('seguimiento.export');
 
     Route::get('/prevaluaciones', [PrevaluationController::class, 'index'])->name('prevaluaciones.index');
+    Route::post('/prevaluaciones/{key}/tomar', [PrevaluationController::class, 'claim'])->name('prevaluaciones.claim');
+    Route::delete('/prevaluaciones/{key}/tomar', [PrevaluationController::class, 'release'])->name('prevaluaciones.release');
     Route::put('/prevaluaciones/{key}', [PrevaluationController::class, 'save'])->name('prevaluaciones.save');
     Route::put('/prevaluaciones/{key}/observaciones', [PrevaluationController::class, 'note'])->name('prevaluaciones.note');
     Route::get('/prevaluaciones/{key}/documentos/{field}', [PrevaluationController::class, 'file'])->name('prevaluaciones.file');

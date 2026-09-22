@@ -91,6 +91,7 @@ class PrevaluationTest extends TestCase
     public function test_evaluator_can_save_own_review_and_admin_can_only_save_observation(): void
     {
         $this->be(LegacyUser::findOrFail(20));
+        $this->post('/prevaluaciones/historico-80/tomar', ['servicio'=>'cafeteria'])->assertRedirect();
         $this->put('/prevaluaciones/historico-80', ['servicio'=>'cafeteria','resultado'=>'1','items'=>[
             'prop_escrito'=>['cumple'=>'1','comentario'=>'Completo'], 'tlacoyo'=>['cumple'=>'0','comentario'=>'Revisar precio'],
         ]])->assertRedirect()->assertSessionHasNoErrors();
@@ -99,9 +100,11 @@ class PrevaluationTest extends TestCase
         $this->assertSame(0, DB::connection('legacy')->table('tm_preval_cafe_doc')->count());
         $this->put('/prevaluaciones/historico-80/observaciones', ['observaciones'=>'Revisado'])->assertForbidden();
         $this->be(LegacyUser::findOrFail(21));
-        $this->put('/prevaluaciones/historico-80', ['items'=>['prop_escrito'=>['cumple'=>'0']]])->assertForbidden();
+        $this->put('/prevaluaciones/historico-80', ['items'=>['prop_escrito'=>['cumple'=>'0']]])->assertStatus(409);
         $this->be(LegacyUser::findOrFail(18));
         $this->put('/prevaluaciones/historico-80', ['items'=>['prop_escrito'=>['cumple'=>'0']]])->assertForbidden();
+        $this->get('/prevaluaciones')->assertOk()->assertDontSee('Permisionario Uno');
+        $this->get('/prevaluaciones?estado=evaluado')->assertOk()->assertSee('Permisionario Uno');
         $this->put('/prevaluaciones/historico-80/observaciones', ['observaciones'=>'Falta confirmar precio'])->assertRedirect();
         $this->get('/prevaluaciones?registro=historico-80')->assertOk()->assertSee('Falta confirmar precio');
     }
@@ -167,6 +170,7 @@ class PrevaluationTest extends TestCase
             ->assertSee('/prevaluaciones/actual-'.$registration.'/documentos/req-'.$requirement);
         $this->get('/prevaluaciones/actual-'.$registration.'/documentos/req-'.$requirement)->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
+        $this->post('/prevaluaciones/actual-'.$registration.'/tomar', ['servicio'=>'cafeteria'])->assertRedirect();
         $this->put('/prevaluaciones/actual-'.$registration, ['resultado'=>'2','items'=>[
             'req-'.$requirement=>['cumple'=>'1','comentario'=>'Correcto'],
             'precio-'.$product=>['cumple'=>'1','comentario'=>'Precio revisado'],
@@ -188,12 +192,65 @@ class PrevaluationTest extends TestCase
         $this->be(LegacyUser::findOrFail(20));
         $this->put('/prevaluaciones/historico-80', ['resultado'=>'1','items'=>[
             'prop_escrito'=>['cumple'=>'1','comentario'=>'Alterado'],
-        ]])->assertForbidden();
+        ]])->assertStatus(409);
         $this->be(LegacyUser::findOrFail(21));
-        $this->put('/prevaluaciones/historico-80', ['resultado'=>'2','items'=>[
-            'prop_escrito'=>['cumple'=>'0','comentario'=>'Pendiente de firma'],
-        ]])->assertRedirect();
-        $this->assertDatabaseHas('ccyf_prevaluacion_items', ['clave'=>'prop_escrito','comentario'=>'Pendiente de firma']);
+        $this->post('/prevaluaciones/historico-80/tomar')->assertStatus(409);
+        $this->get('/prevaluaciones')->assertOk()->assertDontSee('Permisionario Uno');
         $this->assertSame('Falta firma', DB::connection('legacy')->table('tm_preval_cafe_doc')->value('comentario'));
+    }
+
+    public function test_current_call_and_its_campuses_are_the_only_filter_options(): void
+    {
+        $service = DB::table('ccyf_tipos_servicio')->insertGetId(['legacy_trami_id'=>3, 'nombre'=>'Cafetería', 'nombre_clave'=>'cafeteria', 'descripcion'=>'Servicio de cafetería']);
+        DB::table('ccyf_convocatorias')->insert(['id'=>9, 'legacy_cat_id'=>9, 'numero'=>'Novena convocatoria',
+            'numero_clave'=>'novena', 'servicio_id'=>$service, 'activo'=>1]);
+        $campus = DB::table('ccyf_planteles')->insertGetId(['nombre'=>'Plantel Centro', 'nombre_clave'=>'plantel-centro']);
+        DB::table('ccyf_convocatoria_planteles')->insert(['convocatoria_id'=>9,'plantel_id'=>$campus]);
+        DB::connection('legacy')->table('tm_categoria_widi')->insert(['cat_id'=>8,'cat_nom'=>'Convocatoria anterior']);
+        DB::connection('legacy')->table('tm_documento')->insert(['doc_id'=>79,'trami_id'=>3,'usu_id'=>4,'num_doc'=>8,
+            'doc_exter'=>'Plantel Norte','doc_estado'=>'Finalizado','fech_crea'=>'2026-05-01 10:00:00']);
+        $this->be(LegacyUser::findOrFail(20));
+        $this->get('/prevaluaciones?convocatoria=8')->assertOk()->assertSee('Novena convocatoria')
+            ->assertSee('Plantel Centro')->assertDontSee('Plantel Norte')->assertDontSee('Convocatoria anterior');
+    }
+
+    public function test_claim_blocks_another_evaluator_and_completed_review_leaves_the_list(): void
+    {
+        $this->be(LegacyUser::findOrFail(20));
+        $this->post('/prevaluaciones/historico-80/tomar', ['servicio'=>'cafeteria'])->assertRedirect();
+        $this->get('/prevaluaciones?registro=historico-80')->assertOk()->assertSee('Liberar expediente');
+        $this->be(LegacyUser::findOrFail(21));
+        $this->post('/prevaluaciones/historico-80/tomar')->assertStatus(409);
+        $this->get('/prevaluaciones')->assertOk()->assertDontSee('Permisionario Uno');
+        $this->put('/prevaluaciones/historico-80', ['resultado'=>'1','items'=>['tlacoyo'=>['cumple'=>'1']]])->assertForbidden();
+        $this->be(LegacyUser::findOrFail(20));
+        $this->put('/prevaluaciones/historico-80', ['resultado'=>'1','items'=>['tlacoyo'=>['cumple'=>'1']]])->assertRedirect();
+        $this->get('/prevaluaciones')->assertOk()->assertDontSee('Permisionario Uno');
+        $this->post('/prevaluaciones/historico-80/tomar')->assertStatus(409);
+        $this->put('/prevaluaciones/historico-80', ['resultado'=>'2','items'=>['tlacoyo'=>['cumple'=>'1']]])->assertStatus(409);
+    }
+
+    public function test_price_comparison_modal_shows_total_and_cheapest_item(): void
+    {
+        DB::connection('legacy')->table('tm_documento')->insert(['doc_id'=>82,'trami_id'=>3,'usu_id'=>4,'num_doc'=>9,
+            'doc_exter'=>'Plantel Centro','doc_estado'=>'Finalizado','fech_crea'=>'2026-06-03 10:00:00']);
+        DB::connection('legacy')->table('tm_documento_cafeteria')->insert(['doc_id'=>82,'est'=>1,'tlacoyo'=>12]);
+        $this->be(LegacyUser::findOrFail(18));
+        $this->get('/prevaluaciones?servicio=cafeteria&plantel=Plantel%20Centro&comparar=1')
+            ->assertOk()->assertSee('Comparación de precios')->assertSee('Menor precio por producto')
+            ->assertSee('$12.00');
+    }
+
+    public function test_unfinished_review_can_be_released_for_another_evaluator(): void
+    {
+        $this->be(LegacyUser::findOrFail(20));
+        $this->post('/prevaluaciones/historico-80/tomar')->assertRedirect();
+        $this->put('/prevaluaciones/historico-80', ['items'=>['tlacoyo'=>['cumple'=>'1']]])->assertRedirect();
+        $this->assertDatabaseHas('ccyf_prevaluaciones', ['registro_id'=>80,'resultado'=>null,'evaluador_id'=>20]);
+        $this->delete('/prevaluaciones/historico-80/tomar')->assertRedirect();
+        $this->assertDatabaseMissing('ccyf_prevaluaciones', ['registro_id'=>80]);
+        $this->be(LegacyUser::findOrFail(21));
+        $this->post('/prevaluaciones/historico-80/tomar')->assertRedirect();
+        $this->assertDatabaseHas('ccyf_prevaluaciones', ['registro_id'=>80,'evaluador_id'=>21]);
     }
 }
