@@ -23,7 +23,8 @@ class FinishedRecords
         }
         $localRows = $local->get([
             'registro.*', 'convocatoria.numero as convocatoria_nombre',
-            'servicio.nombre as servicio_nombre', 'plantel.nombre as plantel_nombre',
+            'servicio.nombre as servicio_nombre', 'servicio.legacy_trami_id as legacy_servicio_id',
+            'plantel.nombre as plantel_nombre',
         ]);
 
         $historical = DB::connection('legacy')->table('tm_documento as documento')

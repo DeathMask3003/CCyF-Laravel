@@ -68,6 +68,29 @@ class PriceCatalogTest extends TestCase
             $table->increments('id_evaluacion');
             $table->integer('doc_id');
         });
+        foreach (['tm_preval_cafe_doc', 'tm_preval_foto_doc'] as $name) {
+            Schema::connection('legacy')->create($name, function (Blueprint $table) use ($name): void {
+                $table->increments($name === 'tm_preval_cafe_doc' ? 'id_preval_cafe' : 'id_preval_foto');
+                $table->integer('doc_id');
+                $table->integer('usu_preval');
+                $table->integer('est')->default(1);
+                $table->string('campo_doc');
+                $table->text('comentario')->nullable();
+                $table->integer('cumple')->nullable();
+                $table->integer('viable_estado')->nullable();
+                $table->dateTime('fecha_registro')->nullable();
+                $table->text('observaciones_admin')->nullable();
+                $table->dateTime('fecha_observaciones_admin')->nullable();
+            });
+        }
+        foreach (['tm_documento_cafeteria', 'tm_documento_fotocopiado'] as $name) {
+            Schema::connection('legacy')->create($name, function (Blueprint $table): void {
+                $table->integer('doc_id');
+                $table->integer('est')->default(1);
+                $table->decimal('tlacoyo')->nullable();
+                $table->decimal('oficio')->nullable();
+            });
+        }
         Schema::connection('legacy')->create('td_documentov3', function (Blueprint $table): void {
             $table->increments('det_id');
             $table->integer('doc_id');
@@ -649,7 +672,7 @@ class PriceCatalogTest extends TestCase
             ->assertSee('/convocatorias-finalizadas/historico/700/resultado-pdf', false)
             ->assertSee('/convocatorias-finalizadas/historico/701/resultado-pdf', false);
         $this->get('/convocatorias-finalizadas/historico/700')->assertOk()
-            ->assertSee('Carta de designación')->assertSee('PDF no disponible');
+            ->assertSee('Carta de designación')->assertSee('Evaluación no disponible');
         $this->get('/convocatorias-finalizadas/historico/700/resultado-pdf')->assertOk()
             ->assertHeader('Content-Type', 'application/pdf')
             ->assertHeader('Content-Disposition', 'inline; filename="Carta_Designacion_700.pdf"');
@@ -659,6 +682,79 @@ class PriceCatalogTest extends TestCase
         DB::connection('legacy')->table('tm_documento')->where('doc_id', 700)->update(['doc_designado' => 0]);
         $this->get('/convocatorias-finalizadas/historico/700/resultado-pdf')->assertNotFound();
         $this->get('/convocatorias-finalizadas/historico/999/resultado-pdf')->assertNotFound();
+    }
+
+    public function test_final_evaluation_is_generated_from_admin_prevaluation_for_both_legacy_services(): void
+    {
+        Storage::fake('local');
+        DB::connection('legacy')->table('tm_documento')->insert([
+            ['doc_id' => 700, 'num_doc' => '8', 'trami_id' => 3, 'area_id' => 23,
+                'usu_id' => 2, 'doc_estado' => 'Finalizado', 'doc_exter' => 'Plantel Atlacomulco',
+                'doc_designado' => 1, 'fech_concluido' => '2026-09-20 09:00:00'],
+            ['doc_id' => 701, 'num_doc' => '9', 'trami_id' => 4, 'area_id' => 24,
+                'usu_id' => 2, 'doc_estado' => 'Finalizado', 'doc_exter' => 'CEMSaD Acambay',
+                'doc_designado' => 0, 'fech_concluido' => '2026-09-21 09:00:00'],
+            ['doc_id' => 702, 'num_doc' => '8', 'trami_id' => 3, 'usu_id' => 2,
+                'area_id' => null, 'doc_exter' => null, 'doc_designado' => 0,
+                'doc_estado' => 'Finalizado', 'fech_concluido' => '2026-09-22 09:00:00'],
+        ]);
+        DB::connection('legacy')->table('tm_preval_cafe_doc')->insert([
+            'doc_id' => 700, 'usu_preval' => 1, 'campo_doc' => 'prop_escrito',
+            'cumple' => 1, 'comentario' => 'Documento correcto', 'viable_estado' => 1,
+            'fecha_registro' => '2026-09-19 09:00:00', 'est' => 1,
+        ]);
+        DB::connection('legacy')->table('tm_preval_foto_doc')->insert([
+            'doc_id' => 701, 'usu_preval' => 1, 'campo_doc' => 'prop_escrito',
+            'cumple' => 0, 'comentario' => 'Documento incompleto', 'viable_estado' => 3,
+            'fecha_registro' => '2026-09-19 09:00:00', 'est' => 1,
+        ]);
+        DB::connection('legacy')->table('tm_documento_cafeteria')->insert([
+            'doc_id' => 700, 'est' => 1, 'tlacoyo' => 12.50,
+        ]);
+        DB::connection('legacy')->table('tm_documento_fotocopiado')->insert([
+            'doc_id' => 701, 'est' => 1, 'oficio' => 2.50,
+        ]);
+
+        $this->get('/convocatorias-finalizadas/historico/700/evaluacion-final.pdf')->assertRedirect('/acceso');
+        $this->asUser(1);
+        $list = $this->get('/convocatorias-finalizadas');
+        $list->assertOk()->assertSee('/historico/700/evaluacion-final.pdf', false)
+            ->assertSee('/historico/701/evaluacion-final.pdf', false)
+            ->assertDontSee('/historico/702/evaluacion-final.pdf', false);
+        $this->get('/convocatorias-finalizadas/historico/700')->assertOk()
+            ->assertSee('Consultar evaluación PDF')->assertSee('/historico/700/evaluacion-final.pdf', false);
+        foreach ([700, 701] as $id) {
+            $response = $this->get("/convocatorias-finalizadas/historico/{$id}/evaluacion-final.pdf");
+            $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
+            $this->assertStringStartsWith('%PDF-', $response->getContent());
+            $this->assertStringContainsString('inline;', $response->headers->get('Content-Disposition'));
+            $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+        }
+        $this->get('/convocatorias-finalizadas/historico/702/evaluacion-final.pdf')->assertNotFound();
+        $this->get('/convocatorias-finalizadas/historico/999/evaluacion-final.pdf')->assertNotFound();
+    }
+
+    public function test_finalized_current_record_shows_its_prevaluation_pdf(): void
+    {
+        Storage::fake('local');
+        $record = $this->reviewRecord();
+        DB::table('ccyf_registros')->where('id', $record)->update([
+            'estado' => 'Finalizado', 'decision' => 'no_designado', 'respuesta' => 'No designado',
+        ]);
+        $prevaluation = DB::table('ccyf_prevaluaciones')->insertGetId([
+            'origen' => 'actual', 'registro_id' => $record, 'evaluador_id' => 1, 'resultado' => 2,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('ccyf_prevaluacion_items')->insert([
+            'prevaluacion_id' => $prevaluation, 'clave' => 'precio-1', 'cumple' => 1,
+            'comentario' => 'Precio adecuado', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->asUser(1);
+        $this->get('/convocatorias-finalizadas')->assertOk()->assertSee("/expedientes/{$record}/evaluacion-final.pdf", false);
+        $this->get("/expedientes/{$record}")->assertOk()->assertSee('Consultar evaluación PDF');
+        $response = $this->get("/expedientes/{$record}/evaluacion-final.pdf");
+        $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
     }
 
     public function test_finalized_exports_match_original_columns_filters_and_permissions(): void

@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Services\FinishedRecords;
 use App\Services\FinishedResultPdf;
+use App\Services\FinalEvaluationReport;
 use App\Services\DocumentFiles;
 use App\Services\LegacyMenu;
 use App\Services\PrevaluationCatalog;
+use App\Services\PrevaluationRecords;
+use Illuminate\Http\Response;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -36,16 +39,21 @@ class OfficeReviewController extends Controller
         ]);
     }
 
-    public function finished(Request $request, LegacyMenu $menu, FinishedRecords $finishedRecords, FinishedResultPdf $resultPdf): View
+    public function finished(Request $request, LegacyMenu $menu, FinishedRecords $finishedRecords,
+        FinishedResultPdf $resultPdf, FinalEvaluationReport $evaluation): View
     {
         $all = $finishedRecords->forRequest($request, $menu);
         $page = max(1, LengthAwarePaginator::resolveCurrentPage());
         $records = new LengthAwarePaginator($all->forPage($page, 15)->values(), $all->count(), 15, $page, [
             'path' => $request->url(), 'query' => $request->query(),
         ]);
-        $records->getCollection()->each(function ($record) use ($resultPdf): void {
+        $records->getCollection()->each(function ($record) use ($resultPdf, $evaluation): void {
             $record->resultado_pdf_disponible = $record->origen === 'historico'
                 && $resultPdf->historical((int) $record->id, (int) $record->designado === 1) !== null;
+            $service = (int) $record->legacy_servicio_id;
+            $record->evaluacion_pdf_disponible = in_array($service, [3, 4], true)
+                && $evaluation->source($record->origen, (int) $record->id,
+                    $service === 3 ? 'cafeteria' : 'fotocopiado') !== null;
         });
         $canReview = $menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio');
 
@@ -55,7 +63,7 @@ class OfficeReviewController extends Controller
         ]);
     }
 
-    public function show(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles): View
+    public function show(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles, FinalEvaluationReport $evaluation): View
     {
         $registration = $this->localRecords()->where('registro.id', $record)->first();
         abort_unless($registration, 404);
@@ -75,10 +83,15 @@ class OfficeReviewController extends Controller
                 return $item;
             });
 
-        return view('revision.show', compact('registration', 'prices', 'files'));
+        $service = (int) $registration->legacy_servicio_id === 3 ? 'cafeteria' : 'fotocopiado';
+        $finalEvaluationAvailable = $registration->estado === 'Finalizado'
+            && in_array((int) $registration->legacy_servicio_id, [3, 4], true)
+            && $evaluation->source('actual', $record, $service) !== null;
+
+        return view('revision.show', compact('registration', 'prices', 'files', 'finalEvaluationAvailable'));
     }
 
-    public function historical(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles, FinishedResultPdf $resultPdf): View
+    public function historical(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles, FinishedResultPdf $resultPdf, FinalEvaluationReport $evaluation): View
     {
         $registration = DB::connection('legacy')->table('tm_documento as documento')
             ->leftJoin('tm_usuario as usuario', 'usuario.usu_id', '=', 'documento.usu_id')
@@ -101,11 +114,57 @@ class OfficeReviewController extends Controller
             'url' => route('revision.historical-file', [$record, $key]),
         ]);
         $resultadoPdfDisponible = $resultPdf->historical($record, (int) $registration->doc_designado === 1) !== null;
-        $evaluacionRegistrada = DB::connection('legacy')
-            ->table($service === 'cafeteria' ? 'tm_eval_cafe' : 'tm_evaluaciones')
-            ->where('doc_id', $record)->exists();
+        $finalEvaluationAvailable = $evaluation->source('historico', $record, $service) !== null;
 
-        return view('revision.historical', compact('registration', 'requirements', 'previewDocuments', 'resultadoPdfDisponible', 'evaluacionRegistrada'));
+        return view('revision.historical', compact('registration', 'requirements', 'previewDocuments', 'resultadoPdfDisponible', 'finalEvaluationAvailable'));
+    }
+
+    public function historicalFinalEvaluationPdf(int $record, Request $request, LegacyMenu $menu,
+        FinalEvaluationReport $evaluation, PrevaluationRecords $prevaluations): Response
+    {
+        $registration = DB::connection('legacy')->table('tm_documento as d')
+            ->leftJoin('tm_usuario as u', 'u.usu_id', '=', 'd.usu_id')
+            ->leftJoin('tm_areas as p', 'p.area_id', '=', 'd.area_id')
+            ->leftJoin('tm_categoria_widi as c', 'c.cat_id', '=', 'd.num_doc')
+            ->where('d.doc_id', $record)->where('d.doc_estado', 'Finalizado')
+            ->whereIn('d.trami_id', [3, 4])
+            ->first(['d.usu_id', 'd.trami_id', 'd.doc_exter', 'u.usu_area', 'p.area_nom', 'c.cat_nom']);
+        abort_unless($registration, 404);
+        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
+        $service = (int) $registration->trami_id === 3 ? 'cafeteria' : 'fotocopiado';
+        $source = $evaluation->source('historico', $record, $service);
+        abort_unless($source, 404, 'Este expediente no tiene una evaluación final registrada.');
+
+        $item = (object) [
+            'origen' => 'historico', 'registro_id' => $record, 'servicio' => $service,
+            'convocatoria' => $registration->cat_nom ?: 'Sin convocatoria registrada',
+            'plantel' => $registration->doc_exter ?: $registration->area_nom,
+            'nombre' => $registration->usu_area,
+        ];
+
+        return $evaluation->pdf($item, $source, $prevaluations->detail($item));
+    }
+
+    public function localFinalEvaluationPdf(int $record, Request $request, LegacyMenu $menu,
+        FinalEvaluationReport $evaluation, PrevaluationRecords $prevaluations): Response
+    {
+        $registration = $this->localRecords()->where('registro.id', $record)
+            ->where('registro.estado', 'Finalizado')->first();
+        abort_unless($registration, 404);
+        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
+        abort_unless(in_array((int) $registration->legacy_servicio_id, [3, 4], true), 404);
+        $service = (int) $registration->legacy_servicio_id === 3 ? 'cafeteria' : 'fotocopiado';
+        $source = $evaluation->source('actual', $record, $service);
+        abort_unless($source, 404, 'Este expediente no tiene una evaluación final registrada.');
+
+        $item = (object) [
+            'origen' => 'actual', 'registro_id' => $record, 'servicio' => $service,
+            'convocatoria' => $registration->convocatoria_nombre,
+            'plantel' => $registration->plantel_nombre,
+            'nombre' => $registration->solicitante,
+        ];
+
+        return $evaluation->pdf($item, $source, $prevaluations->detail($item));
     }
 
     public function historicalResultPdf(int $record, Request $request, LegacyMenu $menu, FinishedResultPdf $resultPdf): BinaryFileResponse
@@ -223,7 +282,8 @@ class OfficeReviewController extends Controller
             ->join('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'registro.servicio_id')
             ->join('ccyf_planteles as plantel', 'plantel.id', '=', 'registro.plantel_id')
             ->select('registro.*', 'convocatoria.numero as convocatoria_nombre',
-                'servicio.nombre as servicio_nombre', 'plantel.nombre as plantel_nombre');
+                'servicio.nombre as servicio_nombre', 'servicio.legacy_trami_id as legacy_servicio_id',
+                'plantel.nombre as plantel_nombre');
     }
 
     private function applyFilters($query, Request $request): void
