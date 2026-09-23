@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const add = document.getElementById('emision-add-campus');
     const empty = document.getElementById('emision-empty-row');
     const count = document.getElementById('emision-count');
+    const notice = document.getElementById('emision-data-notice');
     let selected = null;
     let highlighted = -1;
     const norm = text => text.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -65,6 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
         count.textContent = total;
         empty.hidden = total > 0;
         add.disabled = !selected || added().has(selected.id);
+        const incomplete = [...tbody.querySelectorAll('tr[data-campus-id]')].filter(row =>
+            ['espacio', 'matricula', 'monto', 'garantia'].some(field =>
+                !row.querySelector(`[name$="[${field}]"]`)?.value.trim()));
+        if (notice) {
+            notice.hidden = incomplete.length === 0;
+            notice.textContent = incomplete.length
+                ? `Faltan datos de espacio, matrícula, monto mensual o garantía en ${incomplete.length} ${incomplete.length === 1 ? 'plantel' : 'planteles'}. Completa los campos vacíos de la tabla; no se usarán importes de otro servicio.`
+                : '';
+        }
     };
     const hide = () => { list.hidden = true; search.setAttribute('aria-expanded', 'false'); highlighted = -1; };
     const choose = campus => {
@@ -148,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
         search.focus();
         hide();
     });
+    tbody.addEventListener('input', refresh);
     document.getElementById('emision-apply-date')?.addEventListener('click', () => {
         const input = document.getElementById('emision-bulk-date');
         if (!input.value) { input.focus(); return; }

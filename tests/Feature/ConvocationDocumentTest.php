@@ -144,6 +144,15 @@ class ConvocationDocumentTest extends TestCase
         $this->assertSame(750, $campus->matricula);
         $this->assertEquals(3200, $campus->monto);
         $this->assertEquals(1600, $campus->garantia);
+        DB::table('ccyf_plantel_servicios')->insert([
+            'plantel_id' => 10, 'servicio_id' => 2, 'espacio' => 'Local configurado',
+            'matricula' => 740, 'monto' => 3100, 'garantia' => 1500,
+        ]);
+        DB::connection('legacy')->table('tm_areas')->where('area_id', 10)
+            ->update(['monto_foto' => null]);
+        $configured = app(ConvocationDocuments::class)->campuses(9, true)->firstWhere('id', 10);
+        $this->assertSame('Módulo 2', $configured->espacio);
+        $this->assertEquals(3100, $configured->monto);
     }
 
     public function test_html_sanitizer_keeps_format_without_active_content(): void

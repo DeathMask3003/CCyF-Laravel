@@ -29,6 +29,7 @@
                     @foreach ($campuses as $campus) @if (in_array((int) $campus->id, $selectedIds, true)) @include('emision-convocatorias.partials.campus-row', ['campus' => $campus, 'snapshot' => $snapshots->get($campus->id)]) @endif @endforeach
                     <tr id="emision-empty-row" @if(count($selectedIds)) hidden @endif><td colspan="8" class="emision-table-empty">Todavía no has agregado planteles. Búscalos arriba para formar el Anexo I.</td></tr>
                 </tbody></table></div>
+                <div id="emision-data-notice" class="emision-errors" role="status" hidden></div>
                 @foreach ($campuses as $campus)<template id="emision-campus-row-{{ $campus->id }}">@include('emision-convocatorias.partials.campus-row', ['campus' => $campus, 'snapshot' => $snapshots->get($campus->id)])</template>@endforeach
                 <script type="application/json" id="emision-campus-options">@json($campuses->map(fn ($campus) => ['id' => (int) $campus->id, 'nombre' => $campus->nombre])->values())</script>
             </section>
@@ -44,4 +45,4 @@
     @endif
 </div>
 @endsection
-@push('scripts')<script src="{{ asset('js/emision-convocatorias.js') }}?v=6" defer></script>@endpush
+@push('scripts')<script src="{{ asset('js/emision-convocatorias.js') }}?v=7" defer></script>@endpush

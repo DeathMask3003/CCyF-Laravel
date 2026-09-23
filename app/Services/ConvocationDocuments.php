@@ -42,7 +42,7 @@ class ConvocationDocuments
         $service = DB::table('ccyf_convocatorias as convocatoria')
             ->join('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'convocatoria.servicio_id')
             ->where('convocatoria.id', $convocationId)
-            ->first(['servicio.nombre', 'servicio.plantilla']);
+            ->first(['servicio.id', 'servicio.nombre', 'servicio.plantilla']);
         if (! $service) {
             return collect();
         }
@@ -51,7 +51,7 @@ class ConvocationDocuments
             || str_contains(mb_strtolower(\Illuminate\Support\Str::ascii($service->nombre)), 'fotocopi');
         $suffix = $photocopy ? '_foto' : '';
 
-        return DB::connection('legacy')->table('tm_areas')
+        $campuses = DB::connection('legacy')->table('tm_areas')
             ->where(function ($query): void {
                 $query->where('area_nom', 'like', 'Plantel %')
                     ->orWhere('area_nom', 'like', 'Cemsad %');
@@ -62,6 +62,24 @@ class ConvocationDocuments
                 'direccion_plantel as direccion', 'est as activo',
                 'espacio'.$suffix.' as espacio', 'matricula'.$suffix.' as matricula',
                 'monto'.$suffix.' as monto', 'garantia'.$suffix.' as garantia']);
+
+        $configured = DB::table('ccyf_plantel_servicios as datos')
+            ->join('ccyf_planteles as plantel', 'plantel.id', '=', 'datos.plantel_id')
+            ->where('datos.servicio_id', $service->id)
+            ->whereIn('plantel.legacy_area_id', $campuses->pluck('id'))
+            ->get(['plantel.legacy_area_id', 'datos.espacio', 'datos.matricula',
+                'datos.monto', 'datos.garantia'])
+            ->keyBy('legacy_area_id');
+
+        return $campuses->map(function ($campus) use ($configured) {
+            $saved = $configured->get($campus->id);
+            foreach (['espacio', 'matricula', 'monto', 'garantia'] as $field) {
+                if (($campus->{$field} === null || $campus->{$field} === '') && $saved) {
+                    $campus->{$field} = $saved->{$field};
+                }
+            }
+            return $campus;
+        });
     }
 
     public function cleanHtml(string $html): string
