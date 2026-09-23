@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\ConvocationDocuments;
+use App\Services\CcyfStructure;
 use App\Services\LegacyMenu;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -86,8 +87,11 @@ class ConvocationDocumentController extends Controller
         $call = $this->findCall((int) $record->convocatoria_id);
         $calls = $this->calls();
         $campuses = $documents->campuses($call->id);
-        $snapshots = DB::table('ccyf_convocatoria_documento_planteles')
-            ->where('documento_id', $document)->get()->keyBy('plantel_id');
+        $snapshots = DB::table('ccyf_convocatoria_documento_planteles as fila')
+            ->leftJoin('ccyf_planteles as plantel', 'plantel.id', '=', 'fila.plantel_id')
+            ->where('fila.documento_id', $document)
+            ->get(['fila.*', 'plantel.legacy_area_id'])
+            ->keyBy(fn ($row) => $row->legacy_area_id ?: $row->plantel_id);
         $template = $documents->templateFor((object) ['id' => $call->servicio_id, 'nombre' => $call->servicio_nombre]);
         return view('emision-convocatorias.form', ['document' => $record] + compact('calls', 'call', 'campuses', 'snapshots', 'template'));
     }
@@ -186,7 +190,7 @@ class ConvocationDocumentController extends Controller
         if ($creation && ! $preview && ! $call->activo) {
             throw ValidationException::withMessages(['convocatoria_id' => 'Selecciona una convocatoria activa.']);
         }
-        $eligible = $documents->campuses($call->id, $creation && ! $preview)->keyBy('id');
+        $eligible = $documents->campuses($call->id, $creation)->keyBy('id');
         $selected = collect();
         foreach ($data['planteles'] as $id => $row) {
             if (! is_array($row) || empty($row['seleccionado'])) {
@@ -194,7 +198,7 @@ class ConvocationDocumentController extends Controller
             }
             $campus = $eligible->get((int) $id);
             if (! $campus) {
-                throw ValidationException::withMessages(['planteles' => 'Hay un plantel que no pertenece a esta convocatoria.']);
+                throw ValidationException::withMessages(['planteles' => 'Hay un plantel que no está disponible en el catálogo de planteles.']);
             }
             $validated = validator($row, [
                 'direccion' => ['nullable', 'string', 'max:500'],
@@ -210,7 +214,8 @@ class ConvocationDocumentController extends Controller
                 'fecha_inicio.date_format' => 'La fecha de inicio de '.$campus->nombre.' no es válida.',
             ])->validate();
             $selected->push((object) [
-                'plantel_id' => $campus->id, 'nombre' => $campus->nombre,
+                'legacy_area_id' => $campus->id, 'nombre' => $campus->nombre,
+                'correo' => $campus->correo,
                 'direccion' => trim($validated['direccion'] ?? '') ?: null,
                 'espacio' => trim($validated['espacio']), 'matricula' => $validated['matricula'] ?? null,
                 'monto' => $validated['monto'], 'garantia' => $validated['garantia'] ?? null,
@@ -232,8 +237,27 @@ class ConvocationDocumentController extends Controller
     private function insertCampuses(int $documentId, Collection $campuses): void
     {
         foreach ($campuses as $campus) {
+            $plantelId = DB::table('ccyf_planteles')
+                ->where('legacy_area_id', $campus->legacy_area_id)->value('id');
+            if (! $plantelId) {
+                $key = app(CcyfStructure::class)->key($campus->nombre);
+                if (DB::table('ccyf_planteles')->where('nombre_clave', $key)->exists()) {
+                    $key .= '-area-'.$campus->legacy_area_id;
+                }
+                DB::table('ccyf_planteles')->insertOrIgnore([
+                    'legacy_area_id' => $campus->legacy_area_id, 'nombre' => $campus->nombre,
+                    'nombre_clave' => $key, 'correo' => $campus->correo,
+                    'direccion' => $campus->direccion, 'activo' => true,
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+                $plantelId = DB::table('ccyf_planteles')
+                    ->where('legacy_area_id', $campus->legacy_area_id)->value('id');
+                if (! $plantelId) {
+                    throw ValidationException::withMessages(['planteles' => 'No fue posible registrar el plantel seleccionado.']);
+                }
+            }
             DB::table('ccyf_convocatoria_documento_planteles')->insert([
-                'documento_id' => $documentId, 'plantel_id' => $campus->plantel_id,
+                'documento_id' => $documentId, 'plantel_id' => $plantelId,
                 'nombre' => $campus->nombre, 'direccion' => $campus->direccion,
                 'espacio' => $campus->espacio, 'matricula' => $campus->matricula,
                 'monto' => $campus->monto, 'garantia' => $campus->garantia,

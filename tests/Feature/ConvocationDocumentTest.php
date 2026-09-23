@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\LegacyUser;
 use App\Services\ConvocationDocuments;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class ConvocationDocumentTest extends TestCase
@@ -18,6 +20,21 @@ class ConvocationDocumentTest extends TestCase
         config()->set('database.connections.legacy', ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
         DB::purge('sqlite'); DB::purge('legacy');
         $this->artisan('migrate', ['--database' => 'sqlite', '--force' => true]);
+        Schema::connection('legacy')->create('tm_areas', function (Blueprint $table): void {
+            $table->unsignedInteger('area_id')->primary();
+            $table->string('area_nom');
+            $table->string('area_correo')->nullable();
+            $table->string('direccion_plantel')->nullable();
+            $table->string('espacio')->nullable();
+            $table->unsignedInteger('matricula')->nullable();
+            $table->decimal('monto', 11, 2)->nullable();
+            $table->decimal('garantia', 11, 2)->nullable();
+            $table->string('espacio_foto')->nullable();
+            $table->unsignedInteger('matricula_foto')->nullable();
+            $table->decimal('monto_foto', 11, 2)->nullable();
+            $table->decimal('garantia_foto', 11, 2)->nullable();
+            $table->integer('est');
+        });
         DB::table('ccyf_roles')->insert([['rol_id' => 1, 'rol_nom' => 'Sin acceso', 'est' => 1],
             ['rol_id' => 2, 'rol_nom' => 'Editor', 'est' => 1]]);
         foreach ([1, 2] as $id) {
@@ -30,8 +47,15 @@ class ConvocationDocumentTest extends TestCase
             'nombre_clave' => 'cafeteria', 'descripcion' => 'Servicio', 'activo' => 1]);
         DB::table('ccyf_convocatorias')->insert(['id' => 8, 'numero' => 'Cuarta-2026-Cafetería',
             'numero_clave' => 'cuarta-2026-cafeteria', 'servicio_id' => 1, 'activo' => 1]);
-        DB::table('ccyf_planteles')->insert([['id' => 10, 'nombre' => 'Plantel Centro', 'nombre_clave' => 'centro', 'direccion' => 'Calle 10', 'activo' => 1],
-            ['id' => 11, 'nombre' => 'Plantel Norte', 'nombre_clave' => 'norte', 'direccion' => 'Calle 11', 'activo' => 1]]);
+        DB::table('ccyf_planteles')->insert([['id' => 10, 'legacy_area_id' => 10, 'nombre' => 'Plantel Centro', 'nombre_clave' => 'centro', 'direccion' => 'Calle 10', 'activo' => 1],
+            ['id' => 11, 'legacy_area_id' => 11, 'nombre' => 'Plantel Norte', 'nombre_clave' => 'norte', 'direccion' => 'Calle 11', 'activo' => 1]]);
+        DB::connection('legacy')->table('tm_areas')->insert([
+            ['area_id' => 10, 'area_nom' => 'Plantel Centro', 'direccion_plantel' => 'Calle 10', 'espacio' => 'Local 3', 'matricula' => 500, 'monto' => 2000, 'garantia' => 1000, 'est' => 1],
+            ['area_id' => 11, 'area_nom' => 'Plantel Norte', 'direccion_plantel' => 'Calle 11', 'espacio' => 'Local 4', 'matricula' => 600, 'monto' => 2100, 'garantia' => 1100, 'est' => 1],
+            ['area_id' => 12, 'area_nom' => 'CEMSaD Nuevo', 'direccion_plantel' => 'Calle 12', 'espacio' => 'Local 5', 'matricula' => 300, 'monto' => 1800, 'garantia' => 900, 'est' => 1],
+            ['area_id' => 13, 'area_nom' => 'Departamento Interno', 'direccion_plantel' => null, 'espacio' => null, 'matricula' => null, 'monto' => null, 'garantia' => null, 'est' => 1],
+            ['area_id' => 14, 'area_nom' => 'Plantel Inactivo', 'direccion_plantel' => null, 'espacio' => null, 'matricula' => null, 'monto' => null, 'garantia' => null, 'est' => 0],
+        ]);
         DB::table('ccyf_convocatoria_planteles')->insert(['convocatoria_id' => 8, 'plantel_id' => 10]);
         DB::table('ccyf_plantel_servicios')->insert(['plantel_id' => 10, 'servicio_id' => 1,
             'espacio' => 'Local 3', 'matricula' => 500, 'monto' => 2000, 'garantia' => 1000]);
@@ -44,7 +68,9 @@ class ConvocationDocumentTest extends TestCase
         $this->post('/emision-convocatorias', $this->payload())->assertForbidden();
         $this->be(LegacyUser::findOrFail(2));
         $this->get('/emision-convocatorias/nueva?convocatoria=8')->assertOk()->assertSee('Plantel Centro')
-            ->assertDontSee('Plantel Norte')->assertSee('Todavía no has agregado planteles');
+            ->assertSee('Plantel Norte')->assertSee('CEMSaD Nuevo')
+            ->assertDontSee('Departamento Interno')->assertDontSee('Plantel Inactivo')
+            ->assertSee('Todavía no has agregado planteles');
     }
 
     public function test_save_edit_and_pdf_use_campus_snapshot_without_touching_legacy(): void
@@ -72,17 +98,52 @@ class ConvocationDocumentTest extends TestCase
         $this->assertDatabaseCount('ccyf_convocatoria_documento_planteles', 1);
     }
 
-    public function test_preview_is_read_only_and_rejects_foreign_campuses(): void
+    public function test_preview_is_read_only_and_rejects_unknown_campuses(): void
     {
         $this->be(LegacyUser::findOrFail(2));
         $preview = $this->post('/emision-convocatorias/vista-previa', $this->payload())->assertOk();
         $this->assertStringStartsWith('%PDF', $preview->getContent());
         $this->assertDatabaseCount('ccyf_convocatoria_documentos', 0);
         $invalid = $this->payload();
-        $invalid['planteles'][11] = $invalid['planteles'][10];
+        $invalid['planteles'][99] = $invalid['planteles'][10];
         unset($invalid['planteles'][10]);
         $this->post('/emision-convocatorias', $invalid)->assertSessionHasErrors('planteles');
         $this->assertDatabaseCount('ccyf_convocatoria_documentos', 0);
+    }
+
+    public function test_unlinked_plantel_can_be_saved_from_legacy_catalog(): void
+    {
+        $this->be(LegacyUser::findOrFail(2));
+        $payload = $this->payload();
+        $payload['planteles'][12] = $payload['planteles'][10];
+        unset($payload['planteles'][10]);
+        $payload['planteles'][12]['direccion'] = 'Calle 12';
+        $this->post('/emision-convocatorias', $payload)->assertRedirect();
+        $localId = DB::table('ccyf_planteles')->where('legacy_area_id', 12)->value('id');
+        $this->assertNotNull($localId);
+        $this->assertDatabaseHas('ccyf_convocatoria_documento_planteles', [
+            'plantel_id' => $localId, 'nombre' => 'CEMSaD Nuevo', 'direccion' => 'Calle 12',
+        ]);
+        $document = DB::table('ccyf_convocatoria_documentos')->value('id');
+        $this->get('/emision-convocatorias/'.$document.'/editar')->assertOk()
+            ->assertSee('value="Calle 12"', false);
+    }
+
+    public function test_photocopy_uses_its_own_values_from_legacy_area(): void
+    {
+        DB::table('ccyf_tipos_servicio')->insert(['id' => 2, 'nombre' => 'Fotocopiado',
+            'nombre_clave' => 'fotocopiado', 'descripcion' => 'Servicio', 'plantilla' => 'fotocopiado', 'activo' => 1]);
+        DB::table('ccyf_convocatorias')->insert(['id' => 9, 'numero' => 'Cuarta-2026-Fotocopiado',
+            'numero_clave' => 'cuarta-2026-fotocopiado', 'servicio_id' => 2, 'activo' => 1]);
+        DB::connection('legacy')->table('tm_areas')->where('area_id', 10)->update([
+            'espacio_foto' => 'Módulo 2', 'matricula_foto' => 750,
+            'monto_foto' => 3200, 'garantia_foto' => 1600,
+        ]);
+        $campus = app(ConvocationDocuments::class)->campuses(9, true)->firstWhere('id', 10);
+        $this->assertSame('Módulo 2', $campus->espacio);
+        $this->assertSame(750, $campus->matricula);
+        $this->assertEquals(3200, $campus->monto);
+        $this->assertEquals(1600, $campus->garantia);
     }
 
     public function test_html_sanitizer_keeps_format_without_active_content(): void

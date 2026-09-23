@@ -39,22 +39,29 @@ class ConvocationDocuments
 
     public function campuses(int $convocationId, bool $onlyActive = false): Collection
     {
-        $convocation = DB::table('ccyf_convocatorias')->where('id', $convocationId)->first();
-        if (! $convocation || ! $convocation->servicio_id) {
+        $service = DB::table('ccyf_convocatorias as convocatoria')
+            ->join('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'convocatoria.servicio_id')
+            ->where('convocatoria.id', $convocationId)
+            ->first(['servicio.nombre', 'servicio.plantilla']);
+        if (! $service) {
             return collect();
         }
 
-        return DB::table('ccyf_convocatoria_planteles as enlace')
-            ->join('ccyf_planteles as plantel', 'plantel.id', '=', 'enlace.plantel_id')
-            ->leftJoin('ccyf_plantel_servicios as condiciones', function ($join) use ($convocation): void {
-                $join->on('condiciones.plantel_id', '=', 'plantel.id')
-                    ->where('condiciones.servicio_id', '=', $convocation->servicio_id);
+        $photocopy = $service->plantilla === 'fotocopiado'
+            || str_contains(mb_strtolower(\Illuminate\Support\Str::ascii($service->nombre)), 'fotocopi');
+        $suffix = $photocopy ? '_foto' : '';
+
+        return DB::connection('legacy')->table('tm_areas')
+            ->where(function ($query): void {
+                $query->where('area_nom', 'like', 'Plantel %')
+                    ->orWhere('area_nom', 'like', 'Cemsad %');
             })
-            ->where('enlace.convocatoria_id', $convocationId)
-            ->when($onlyActive, fn ($query) => $query->where('plantel.activo', true))
-            ->orderBy('plantel.nombre')
-            ->get(['plantel.id', 'plantel.nombre', 'plantel.direccion', 'plantel.activo',
-                'condiciones.espacio', 'condiciones.matricula', 'condiciones.monto', 'condiciones.garantia']);
+            ->when($onlyActive, fn ($query) => $query->where('est', 1))
+            ->orderBy('area_nom')
+            ->get(['area_id as id', 'area_nom as nombre', 'area_correo as correo',
+                'direccion_plantel as direccion', 'est as activo',
+                'espacio'.$suffix.' as espacio', 'matricula'.$suffix.' as matricula',
+                'monto'.$suffix.' as monto', 'garantia'.$suffix.' as garantia']);
     }
 
     public function cleanHtml(string $html): string
