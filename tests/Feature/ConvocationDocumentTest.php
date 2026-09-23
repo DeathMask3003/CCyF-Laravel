@@ -44,7 +44,7 @@ class ConvocationDocumentTest extends TestCase
         $this->post('/emision-convocatorias', $this->payload())->assertForbidden();
         $this->be(LegacyUser::findOrFail(2));
         $this->get('/emision-convocatorias/nueva?convocatoria=8')->assertOk()->assertSee('Plantel Centro')
-            ->assertDontSee('Plantel Norte');
+            ->assertDontSee('Plantel Norte')->assertSee('Todavía no has agregado planteles');
     }
 
     public function test_save_edit_and_pdf_use_campus_snapshot_without_touching_legacy(): void
@@ -55,6 +55,8 @@ class ConvocationDocumentTest extends TestCase
         $this->assertDatabaseHas('ccyf_convocatoria_documento_planteles', [
             'documento_id' => $id, 'plantel_id' => 10, 'monto' => 2400,
         ]);
+        $this->assertDatabaseHas('ccyf_convocatoria_documentos', ['id' => $id,
+            'font_family' => 'dejavusans', 'font_size' => 9]);
         $this->assertDatabaseHas('ccyf_plantel_servicios', ['plantel_id' => 10, 'monto' => 2000]);
         $this->assertStringNotContainsString('<script', DB::table('ccyf_convocatoria_documentos')->value('detalles_html'));
         $this->get('/emision-convocatorias')->assertOk()->assertSee('Convocatoria de cafetería');
@@ -92,11 +94,42 @@ class ConvocationDocumentTest extends TestCase
         $this->assertStringNotContainsString('javascript:', $clean);
     }
 
+    public function test_service_template_is_editable_and_new_documents_use_its_style(): void
+    {
+        $this->be(LegacyUser::findOrFail(2));
+        $this->get('/emision-convocatorias/plantillas/cafeteria')->assertOk()
+            ->assertSee('Entrega de la Propuesta')->assertSee('DejaVu Sans');
+        $body = '<h2>Convocatoria actualizada</h2><p>'.str_repeat('Bases editables para cafetería. ', 5).'</p>';
+        $this->post('/emision-convocatorias/plantillas/cafeteria', [
+            'cuerpo_html' => $body, 'font_family' => 'dejavuserif', 'font_size' => '9.5',
+        ])->assertRedirect();
+        $this->assertDatabaseHas('ccyf_convocatoria_plantillas', ['servicio_id' => 1,
+            'font_family' => 'dejavuserif', 'font_size' => 9.5]);
+        $this->get('/emision-convocatorias/nueva?convocatoria=8')->assertOk()
+            ->assertSee('Convocatoria actualizada')->assertSee('value="9.5"', false);
+        $this->post('/emision-convocatorias', $this->payload([
+            'detalles_html' => $body, 'font_family' => 'dejavuserif', 'font_size' => '9.5',
+        ]))->assertRedirect();
+        $this->assertDatabaseHas('ccyf_convocatoria_documentos', ['font_family' => 'dejavuserif', 'font_size' => 9.5]);
+    }
+
+    public function test_full_service_template_can_be_rendered_to_pdf(): void
+    {
+        $this->be(LegacyUser::findOrFail(2));
+        $body = app(ConvocationDocuments::class)->defaultTemplate('Cafetería');
+        $this->assertStringContainsString('Entrega de la Propuesta', $body);
+        $preview = $this->post('/emision-convocatorias/vista-previa', $this->payload([
+            'detalles_html' => $body,
+        ]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', $preview->getContent());
+    }
+
     private function payload(array $override = []): array
     {
         return array_replace_recursive([
             'convocatoria_id' => 8, 'titulo' => 'Convocatoria de cafetería',
             'detalles_html' => '<h2>Bases</h2><p>Entregar propuesta.<script>alert(1)</script></p>',
+            'font_family' => 'dejavusans', 'font_size' => '9',
             'planteles' => [10 => ['seleccionado' => 1, 'direccion' => 'Calle 10', 'espacio' => 'Local 3',
                 'matricula' => 500, 'monto' => '2400.00', 'garantia' => '1000.00', 'fecha_inicio' => '2026-10-01']],
         ], $override);

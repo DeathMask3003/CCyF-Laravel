@@ -74,6 +74,10 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/convocatorias-pendientes', [OfficeReviewController::class, 'pending'])->name('revision.pending');
     Route::get('/emision-convocatorias', [ConvocationDocumentController::class, 'index'])->name('emision.index');
     Route::get('/emision-convocatorias/nueva', [ConvocationDocumentController::class, 'create'])->name('emision.create');
+    Route::get('/emision-convocatorias/plantillas/{service}', [ConvocationDocumentController::class, 'template'])
+        ->whereIn('service', ['cafeteria', 'fotocopiado'])->name('emision.template');
+    Route::post('/emision-convocatorias/plantillas/{service}', [ConvocationDocumentController::class, 'saveTemplate'])
+        ->whereIn('service', ['cafeteria', 'fotocopiado'])->name('emision.template.save');
     Route::match(['post', 'put'], '/emision-convocatorias/vista-previa', [ConvocationDocumentController::class, 'previewDraft'])->name('emision.preview-draft');
     Route::post('/emision-convocatorias', [ConvocationDocumentController::class, 'store'])->name('emision.store');
     Route::get('/emision-convocatorias/{document}/editar', [ConvocationDocumentController::class, 'edit'])->whereNumber('document')->name('emision.edit');

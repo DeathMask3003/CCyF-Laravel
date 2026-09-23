@@ -1,0 +1,11 @@
+@php($key = 'planteles.'.$campus->id)
+<tr data-campus-id="{{ $campus->id }}">
+    <td class="emision-table-name"><strong>{{ $campus->nombre }}</strong><input type="hidden" name="planteles[{{ $campus->id }}][seleccionado]" value="1"></td>
+    <td><label class="sr-only" for="dir-{{ $campus->id }}">Dirección de {{ $campus->nombre }}</label><input id="dir-{{ $campus->id }}" name="planteles[{{ $campus->id }}][direccion]" value="{{ old($key.'.direccion', $snapshot?->direccion ?? $campus->direccion) }}" maxlength="500"></td>
+    <td><label class="sr-only" for="espacio-{{ $campus->id }}">Espacio de {{ $campus->nombre }}</label><input id="espacio-{{ $campus->id }}" name="planteles[{{ $campus->id }}][espacio]" value="{{ old($key.'.espacio', $snapshot?->espacio ?? $campus->espacio) }}" maxlength="100" placeholder="Ej. Local 3"></td>
+    <td><label class="sr-only" for="matricula-{{ $campus->id }}">Matrícula de {{ $campus->nombre }}</label><input id="matricula-{{ $campus->id }}" name="planteles[{{ $campus->id }}][matricula]" type="number" min="0" max="999999" value="{{ old($key.'.matricula', $snapshot?->matricula ?? $campus->matricula) }}"></td>
+    <td><label class="sr-only" for="monto-{{ $campus->id }}">Monto de {{ $campus->nombre }}</label><input id="monto-{{ $campus->id }}" name="planteles[{{ $campus->id }}][monto]" type="number" min="0" step="0.01" value="{{ old($key.'.monto', $snapshot?->monto ?? $campus->monto) }}" placeholder="0.00"></td>
+    <td><label class="sr-only" for="garantia-{{ $campus->id }}">Garantía de {{ $campus->nombre }}</label><input id="garantia-{{ $campus->id }}" name="planteles[{{ $campus->id }}][garantia]" type="number" min="0" step="0.01" value="{{ old($key.'.garantia', $snapshot?->garantia ?? $campus->garantia) }}" placeholder="0.00"></td>
+    <td><label class="sr-only" for="fecha-{{ $campus->id }}">Inicio de {{ $campus->nombre }}</label><input id="fecha-{{ $campus->id }}" name="planteles[{{ $campus->id }}][fecha_inicio]" type="date" value="{{ old($key.'.fecha_inicio', $snapshot?->fecha_inicio) }}"></td>
+    <td><button class="emision-remove" type="button" data-remove-campus="{{ $campus->id }}" aria-label="Quitar {{ $campus->nombre }}">Quitar</button></td>
+</tr>

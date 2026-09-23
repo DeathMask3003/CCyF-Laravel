@@ -57,7 +57,8 @@ class ConvocationDocumentController extends Controller
         $campuses = $call ? $documents->campuses($call->id, true) : collect();
         $snapshots = collect();
         $document = null;
-        return view('emision-convocatorias.form', compact('calls', 'call', 'campuses', 'snapshots', 'document'));
+        $template = $call ? $documents->templateFor((object) ['id' => $call->servicio_id, 'nombre' => $call->servicio_nombre]) : null;
+        return view('emision-convocatorias.form', compact('calls', 'call', 'campuses', 'snapshots', 'document', 'template'));
     }
 
     public function store(Request $request, LegacyMenu $menu, ConvocationDocuments $documents): RedirectResponse
@@ -68,6 +69,7 @@ class ConvocationDocumentController extends Controller
             $id = DB::table('ccyf_convocatoria_documentos')->insertGetId([
                 'convocatoria_id' => $call->id,
                 'titulo' => $data['titulo'], 'detalles_html' => $data['detalles_html'],
+                'font_family' => $data['font_family'], 'font_size' => $data['font_size'],
                 'creado_por' => $request->user()->getKey(), 'actualizado_por' => $request->user()->getKey(),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
@@ -86,7 +88,8 @@ class ConvocationDocumentController extends Controller
         $campuses = $documents->campuses($call->id);
         $snapshots = DB::table('ccyf_convocatoria_documento_planteles')
             ->where('documento_id', $document)->get()->keyBy('plantel_id');
-        return view('emision-convocatorias.form', ['document' => $record] + compact('calls', 'call', 'campuses', 'snapshots'));
+        $template = $documents->templateFor((object) ['id' => $call->servicio_id, 'nombre' => $call->servicio_nombre]);
+        return view('emision-convocatorias.form', ['document' => $record] + compact('calls', 'call', 'campuses', 'snapshots', 'template'));
     }
 
     public function update(int $document, Request $request, LegacyMenu $menu, ConvocationDocuments $documents): RedirectResponse
@@ -97,6 +100,7 @@ class ConvocationDocumentController extends Controller
         DB::transaction(function () use ($request, $record, $data, $campuses): void {
             DB::table('ccyf_convocatoria_documentos')->where('id', $record->id)->update([
                 'titulo' => $data['titulo'], 'detalles_html' => $data['detalles_html'],
+                'font_family' => $data['font_family'], 'font_size' => $data['font_size'],
                 'actualizado_por' => $request->user()->getKey(), 'updated_at' => now(),
             ]);
             DB::table('ccyf_convocatoria_documento_planteles')->where('documento_id', $record->id)->delete();
@@ -109,7 +113,8 @@ class ConvocationDocumentController extends Controller
     {
         $this->authorizeModule($request, $menu);
         [$call, $data, $campuses] = $this->validatedDocument($request, $documents, true, null, true);
-        return $this->pdfResponse($documents->pdf($call, $data['titulo'], $data['detalles_html'], $campuses), false, 'vista-previa-convocatoria.pdf');
+        return $this->pdfResponse($documents->pdf($call, $data['titulo'], $data['detalles_html'], $campuses,
+            $data['font_family'], (float) $data['font_size']), false, 'vista-previa-convocatoria.pdf');
     }
 
     public function pdf(int $document, Request $request, LegacyMenu $menu, ConvocationDocuments $documents): Response
@@ -120,8 +125,47 @@ class ConvocationDocumentController extends Controller
         $campuses = DB::table('ccyf_convocatoria_documento_planteles')
             ->where('documento_id', $document)->orderBy('nombre')->get();
         $download = $request->boolean('descargar');
-        return $this->pdfResponse($documents->pdf($call, $record->titulo, $record->detalles_html, $campuses),
+        return $this->pdfResponse($documents->pdf($call, $record->titulo, $record->detalles_html, $campuses,
+            $record->font_family, (float) $record->font_size),
             $download, 'convocatoria-'.$document.'.pdf');
+    }
+
+    public function template(string $service, Request $request, LegacyMenu $menu, ConvocationDocuments $documents): View
+    {
+        $this->authorizeModule($request, $menu);
+        $serviceRecord = $this->serviceForSlug($service);
+        $template = $request->boolean('base')
+            ? (object) ['cuerpo_html' => $documents->defaultTemplate($serviceRecord->nombre),
+                'font_family' => 'dejavusans', 'font_size' => 9, 'updated_at' => null]
+            : $documents->templateFor($serviceRecord);
+        return view('emision-convocatorias.template', compact('service', 'serviceRecord', 'template'));
+    }
+
+    public function saveTemplate(string $service, Request $request, LegacyMenu $menu,
+        ConvocationDocuments $documents): RedirectResponse
+    {
+        $this->authorizeModule($request, $menu);
+        $serviceRecord = $this->serviceForSlug($service);
+        $data = $request->validate([
+            'cuerpo_html' => ['required', 'string', 'min:100', 'max:100000'],
+            'font_family' => ['required', Rule::in(array_keys(ConvocationDocuments::FONT_FAMILIES))],
+            'font_size' => ['required', 'numeric', 'between:7,14', 'multiple_of:0.5'],
+        ]);
+        $body = $documents->cleanHtml($data['cuerpo_html']);
+        if (mb_strlen(trim(strip_tags($body))) < 100) {
+            throw ValidationException::withMessages(['cuerpo_html' => 'La plantilla necesita al menos 100 caracteres de texto.']);
+        }
+        $values = ['cuerpo_html' => $body, 'font_family' => $data['font_family'],
+            'font_size' => $data['font_size'], 'actualizado_por' => $request->user()->getKey(),
+            'updated_at' => now()];
+        $query = DB::table('ccyf_convocatoria_plantillas')->where('servicio_id', $serviceRecord->id);
+        if ($query->exists()) {
+            $query->update($values);
+        } else {
+            DB::table('ccyf_convocatoria_plantillas')->insert($values +
+                ['servicio_id' => $serviceRecord->id, 'created_at' => now()]);
+        }
+        return redirect()->route('emision.template', $service)->with('status', 'Plantilla guardada. Las nuevas convocatorias usarán esta versión.');
     }
 
     private function validatedDocument(Request $request, ConvocationDocuments $documents, bool $creation,
@@ -131,6 +175,8 @@ class ConvocationDocumentController extends Controller
             'convocatoria_id' => ['required', 'integer', Rule::exists('ccyf_convocatorias', 'id')],
             'titulo' => ['required', 'string', 'max:200'],
             'detalles_html' => ['required', 'string', 'max:100000'],
+            'font_family' => ['required', Rule::in(array_keys(ConvocationDocuments::FONT_FAMILIES))],
+            'font_size' => ['required', 'numeric', 'between:7,14', 'multiple_of:0.5'],
             'planteles' => ['required', 'array'],
         ]);
         $call = $this->findCall((int) $data['convocatoria_id']);
@@ -221,6 +267,14 @@ class ConvocationDocumentController extends Controller
         $record = DB::table('ccyf_convocatoria_documentos')->where('id', $id)->first();
         abort_unless($record, 404);
         return $record;
+    }
+
+    private function serviceForSlug(string $slug): object
+    {
+        abort_unless(in_array($slug, ['cafeteria', 'fotocopiado'], true), 404);
+        $service = DB::table('ccyf_tipos_servicio')->where('nombre', 'like', $slug === 'cafeteria' ? 'Cafeter%' : 'Fotocopi%')->first();
+        abort_unless($service, 404);
+        return $service;
     }
 
     private function authorizeModule(Request $request, LegacyMenu $menu): void

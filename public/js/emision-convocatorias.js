@@ -6,17 +6,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const editor = document.getElementById('emision-editor');
     if (source && editor) {
         const cleanDraft = html => {
-            const documentFragment = new DOMParser().parseFromString(html, 'text/html');
+            const draft = new DOMParser().parseFromString(html, 'text/html');
             const allowed = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'OL', 'UL',
                 'LI', 'BLOCKQUOTE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'A']);
-            documentFragment.body.querySelectorAll('script,style,iframe,object,embed,form,input,img,svg').forEach(node => node.remove());
-            [...documentFragment.body.querySelectorAll('*')].reverse().forEach(node => {
+            draft.body.querySelectorAll('script,style,iframe,object,embed,form,input,img,svg').forEach(node => node.remove());
+            [...draft.body.querySelectorAll('*')].reverse().forEach(node => {
                 const href = node.tagName === 'A' ? node.getAttribute('href') : null;
                 [...node.attributes].forEach(attribute => node.removeAttribute(attribute.name));
                 if (href && /^https?:\/\//i.test(href)) node.setAttribute('href', href);
                 if (!allowed.has(node.tagName)) node.replaceWith(...node.childNodes);
             });
-            return documentFragment.body.innerHTML;
+            return draft.body.innerHTML;
         };
         editor.innerHTML = cleanDraft(source.value);
         form.classList.add('editor-ready');
@@ -38,44 +38,117 @@ document.addEventListener('DOMContentLoaded', () => {
                 event.preventDefault();
                 editor.focus();
                 editor.setAttribute('aria-invalid', 'true');
-                return;
+            } else {
+                editor.removeAttribute('aria-invalid');
             }
-            editor.removeAttribute('aria-invalid');
         });
     }
 
-    const checks = [...document.querySelectorAll('.emision-campus-check')];
-    const all = document.getElementById('emision-all');
-    const count = document.getElementById('emision-count');
-    const refresh = () => {
-        const selected = checks.filter(box => box.checked).length;
-        if (count) count.textContent = selected;
-        if (all) {
-            all.checked = checks.length > 0 && selected === checks.length;
-            all.indeterminate = selected > 0 && selected < checks.length;
-        }
-        checks.forEach(box => {
-            const card = box.closest('[data-campus]');
-            card?.classList.toggle('is-selected', box.checked);
-            const state = card?.querySelector('.emision-campus-state');
-            if (state) state.textContent = box.checked ? 'Incluido' : 'No incluido';
-        });
-    };
-    checks.forEach(box => box.addEventListener('change', refresh));
-    all?.addEventListener('change', () => { checks.forEach(box => { box.checked = all.checked; }); refresh(); });
+    const optionsElement = document.getElementById('emision-campus-options');
+    const tbody = document.getElementById('emision-table-body');
+    if (!optionsElement || !tbody) return;
+    const campuses = JSON.parse(optionsElement.textContent);
     const search = document.getElementById('emision-campus-search');
-    search?.addEventListener('input', () => {
-        const term = search.value.trim().toLocaleLowerCase('es');
-        document.querySelectorAll('[data-campus]').forEach(card => {
-            card.hidden = !card.querySelector('.emision-campus-title strong').textContent.toLocaleLowerCase('es').includes(term);
-        });
+    const list = document.getElementById('emision-suggestions');
+    const add = document.getElementById('emision-add-campus');
+    const empty = document.getElementById('emision-empty-row');
+    const count = document.getElementById('emision-count');
+    let selected = null;
+    let highlighted = -1;
+    const norm = text => text.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const added = () => new Set([...tbody.querySelectorAll('tr[data-campus-id]')].map(row => Number(row.dataset.campusId)));
+    const refresh = () => {
+        const total = added().size;
+        count.textContent = total;
+        empty.hidden = total > 0;
+        add.disabled = !selected || added().has(selected.id);
+    };
+    const hide = () => { list.hidden = true; search.setAttribute('aria-expanded', 'false'); highlighted = -1; };
+    const choose = campus => {
+        selected = campus;
+        search.value = campus.nombre;
+        add.disabled = false;
+        hide();
+        add.focus();
+    };
+    const suggestions = () => {
+        selected = null;
+        add.disabled = true;
+        list.replaceChildren();
+        const term = norm(search.value.trim());
+        const matches = campuses.filter(campus => !added().has(campus.id) && norm(campus.nombre).includes(term)).slice(0, 10);
+        if (!matches.length) {
+            const item = document.createElement('div');
+            item.className = 'emision-suggestion-empty';
+            item.textContent = term ? 'No hay planteles disponibles con esa búsqueda.' : 'Todos los planteles están agregados.';
+            list.append(item);
+        } else {
+            matches.forEach(campus => {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.role = 'option';
+                item.dataset.id = campus.id;
+                item.textContent = campus.nombre;
+                item.addEventListener('click', () => choose(campus));
+                list.append(item);
+            });
+        }
+        list.hidden = false;
+        search.setAttribute('aria-expanded', 'true');
+        highlighted = -1;
+    };
+    search.addEventListener('input', suggestions);
+    search.addEventListener('focus', suggestions);
+    search.addEventListener('keydown', event => {
+        const items = [...list.querySelectorAll('[role=option]')];
+        if (event.key === 'Escape') { hide(); return; }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (list.hidden) suggestions();
+            const available = [...list.querySelectorAll('[role=option]')];
+            if (!available.length) return;
+            highlighted = (highlighted + (event.key === 'ArrowDown' ? 1 : -1) + available.length) % available.length;
+            available.forEach((item, index) => item.classList.toggle('active', index === highlighted));
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const choice = items[highlighted >= 0 ? highlighted : 0];
+            if (choice) choose(campuses.find(campus => campus.id === Number(choice.dataset.id)));
+            else if (selected) add.click();
+        }
+    });
+    document.addEventListener('click', event => {
+        if (!event.target.closest('.emision-combobox')) hide();
+    });
+    add.addEventListener('click', () => {
+        if (!selected || added().has(selected.id)) return;
+        const template = document.getElementById('emision-campus-row-' + selected.id);
+        if (!template) return;
+        tbody.insertBefore(template.content.cloneNode(true), empty);
+        selected = null;
+        search.value = '';
+        refresh();
+        search.focus();
+        hide();
+    });
+    tbody.addEventListener('click', event => {
+        const button = event.target.closest('[data-remove-campus]');
+        if (!button) return;
+        button.closest('tr').remove();
+        refresh();
+        search.focus();
+        hide();
     });
     document.getElementById('emision-apply-date')?.addEventListener('click', () => {
-        const date = document.getElementById('emision-bulk-date').value;
-        if (!date) { document.getElementById('emision-bulk-date').focus(); return; }
-        checks.filter(box => box.checked).forEach(box => {
-            box.closest('[data-campus]').querySelector('input[type=date]').value = date;
-        });
+        const input = document.getElementById('emision-bulk-date');
+        if (!input.value) { input.focus(); return; }
+        tbody.querySelectorAll('tr[data-campus-id] input[type=date]').forEach(field => { field.value = input.value; });
+    });
+    form.addEventListener('submit', event => {
+        if (added().size) return;
+        event.preventDefault();
+        search.focus();
+        suggestions();
     });
     refresh();
 });
