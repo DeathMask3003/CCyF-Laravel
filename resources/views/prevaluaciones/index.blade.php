@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}">@endpush
+@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260922-4">@endpush
 
 @section('title', 'Prevaluaciones')
 
@@ -64,7 +64,7 @@
             <section class="preval-viewer" aria-label="Visualizador PDF"><div class="preval-viewer-head"><div><span class="eyebrow">02 · Visualización</span><h3 id="preval-pdf-name">Selecciona un documento</h3></div><a id="preval-pdf-open" class="preval-open-link" href="#" target="_blank" rel="noopener" hidden>Abrir PDF ↗</a></div>
                 <div id="preval-pdf-empty" class="preval-pdf-empty"><span aria-hidden="true">▤</span><strong>Selecciona un documento</strong><p>El PDF aparecerá aquí. En iPad también puedes abrirlo en una pestaña para usar el visor del dispositivo.</p></div>
                 <div id="preval-pdf-error" class="preval-pdf-error" role="alert" hidden>No fue posible mostrar este PDF aquí. Usa «Abrir PDF» para verlo en el visor del dispositivo.</div>
-                <div id="preval-pdf-stage" class="preval-pdf-stage" hidden><div id="preval-pdf-canvas-wrap" class="preval-pdf-canvas-wrap"><canvas id="preval-pdf-canvas" aria-label="Página del documento PDF"></canvas></div><div class="preval-pdf-toolbar"><button type="button" id="preval-page-prev" aria-label="Página anterior">←</button><span id="preval-page-count">Página 1 de 1</span><button type="button" id="preval-page-next" aria-label="Página siguiente">→</button><span class="preval-toolbar-separator"></span><button type="button" id="preval-zoom-out" aria-label="Reducir zoom">−</button><span id="preval-zoom-label">100 %</span><button type="button" id="preval-zoom-in" aria-label="Aumentar zoom">+</button></div></div>
+                <div id="preval-pdf-stage" class="preval-pdf-stage" hidden><div id="preval-pdf-canvas-wrap" class="preval-pdf-canvas-wrap" aria-label="Páginas del documento PDF"><div id="preval-pdf-pages" class="preval-pdf-pages"></div></div><div class="preval-pdf-toolbar"><button type="button" id="preval-page-prev" aria-label="Página anterior">←</button><span id="preval-page-count">Página 1 de 1</span><button type="button" id="preval-page-next" aria-label="Página siguiente">→</button><span class="preval-toolbar-separator"></span><button type="button" id="preval-zoom-out" aria-label="Reducir zoom">−</button><span id="preval-zoom-label">100 %</span><button type="button" id="preval-zoom-in" aria-label="Aumentar zoom">+</button></div></div>
             </section>
 
             <section class="preval-checklist" aria-label="Prevaluación"><div class="preval-section-head"><span class="eyebrow">03 · Dictamen</span><h3>Revisión documental</h3><small>{{ $canEvaluate ? 'Puedes guardar esta prevaluación' : ($isAdmin ? 'Vista del administrador' : 'Consulta de evaluación') }}</small></div>
@@ -113,6 +113,6 @@
     });
 })();
 </script>
-<script type="module" src="{{ asset('js/prevaluation-pdf.js') }}?v=20260922-3"></script>
+<script type="module" src="{{ asset('js/prevaluation-pdf.js') }}?v=20260922-4"></script>
 @endpush
 @endsection
