@@ -116,12 +116,17 @@ class AcceptedProposalTest extends TestCase
         $this->post('/contratos-permisionarios/plantilla/cafeteria', $this->reviewedTemplate($body))->assertRedirect();
         $this->assertDatabaseHas('ccyf_contract_templates', ['legacy_trami_id'=>3,'body'=>$body,'edited_by'=>2,
             'font_family'=>'dejavusans','font_size'=>9]);
+        $this->assertCount(2, json_decode(DB::table('ccyf_contract_templates')->value('additional_signers'), true));
         $this->assertStringContainsString('CONTRATO', DB::connection('legacy')->table('tm_plantilla_contrato')->value('plantilla_body'));
         $version = DB::table('ccyf_contract_templates')->value('id');
         $this->get('/contratos-permisionarios/plantilla/cafeteria?version='.$version)->assertOk()
             ->assertSee('Estás consultando la versión');
         $this->post('/contratos-permisionarios/plantilla/cafeteria', $this->reviewedTemplate($body.' *****'))
             ->assertSessionHasErrors('body');
+        $incomplete = $this->reviewedTemplate($body);
+        unset($incomplete['additional_signers'][1]['name']);
+        $this->post('/contratos-permisionarios/plantilla/cafeteria', $incomplete)
+            ->assertSessionHasErrors('additional_signers.1.name');
     }
 
     public function test_delivery_is_blocked_on_local_mail_and_prevents_duplicates(): void
@@ -273,6 +278,10 @@ class AcceptedProposalTest extends TestCase
         return ['body'=>$body,'confirmacion'=>'1',
             'font_family'=>'dejavusans','font_size'=>9,
             'institution_signer'=>'Representante Institucional','institution_role'=>'Apoderado legal',
-            'witness_signer'=>'Testigo Institucional','witness_role'=>'Jefatura de departamento'];
+            'witness_signer'=>'Testigo Institucional','witness_role'=>'Jefatura de departamento',
+            'additional_signers'=>[
+                ['title'=>'TESTIGO','name'=>'Firmante Cuatro','role'=>'Cargo Cuatro'],
+                ['title'=>'TESTIGO','name'=>'Firmante Cinco','role'=>'Cargo Cinco'],
+            ]];
     }
 }

@@ -152,6 +152,9 @@ class AcceptedProposalController extends Controller
             abort_unless($viewingVersion, 404);
         }
         $editor = $viewingVersion ?: $current;
+        $additionalSigners = $viewingVersion
+            ? (json_decode((string) $viewingVersion->additional_signers, true) ?: [])
+            : ($current?->additional_signers ?? []);
         $versions = DB::table('ccyf_contract_templates as t')
             ->leftJoin('ccyf_usuarios as u', 'u.usu_id', '=', 't.edited_by')
             ->where('t.legacy_trami_id', $serviceId)->orderByDesc('t.id')
@@ -160,6 +163,7 @@ class AcceptedProposalController extends Controller
             'editor' => $editor, 'viewingVersion' => $viewingVersion,
             'versions' => $versions, 'variables' => ContractDocuments::VARIABLES,
             'fontFamilies' => ContractDocuments::FONT_FAMILIES,
+            'additionalSigners' => $additionalSigners,
             'editorHtml' => $contracts->editorHtml((string) old('body', $editor?->body ?? ''))]);
     }
 
@@ -174,6 +178,10 @@ class AcceptedProposalController extends Controller
             'institution_role' => ['required', 'string', 'max:180'],
             'witness_signer' => ['required', 'string', 'max:180'],
             'witness_role' => ['required', 'string', 'max:180'],
+            'additional_signers' => ['required', 'array', 'size:2'],
+            'additional_signers.*.title' => ['required', 'string', 'max:100'],
+            'additional_signers.*.name' => ['required', 'string', 'max:180'],
+            'additional_signers.*.role' => ['required', 'string', 'max:180'],
             'confirmacion' => ['accepted']]);
         $data['body'] = $contracts->editorHtml($data['body']);
         foreach (['permisionario', 'plantel', 'monto', 'fecha_ini', 'fecha_fin'] as $variable) {
@@ -189,6 +197,7 @@ class AcceptedProposalController extends Controller
             'font_family' => $data['font_family'], 'font_size' => $data['font_size'],
             'institution_signer' => $data['institution_signer'], 'institution_role' => $data['institution_role'],
             'witness_signer' => $data['witness_signer'], 'witness_role' => $data['witness_role'],
+            'additional_signers' => json_encode(array_values($data['additional_signers']), JSON_UNESCAPED_UNICODE),
             'edited_by' => $request->user()->getKey(), 'created_at' => now(), 'updated_at' => now(),
         ]);
         return redirect()->route('contratos.template', $service)->with('status', 'Nueva versión de la plantilla guardada.');

@@ -145,6 +145,58 @@ class ConvocationDocuments
         }
     }
 
+    public function detailsWithAnnex(string $details, string $annex): string
+    {
+        $document = new DOMDocument('1.0', 'UTF-8');
+        $previous = libxml_use_internal_errors(true);
+        $document->loadHTML('<?xml encoding="utf-8"?><div id="ccyf-details">'.$details.'</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $annexDocument = new DOMDocument('1.0', 'UTF-8');
+        $annexDocument->loadHTML('<?xml encoding="utf-8"?><div id="ccyf-annex">'.$annex.'</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        $root = $document->getElementById('ccyf-details');
+        $annexRoot = $annexDocument->getElementById('ccyf-annex');
+        if (! $root || ! $annexRoot) return $details.$annex;
+
+        $requirements = null;
+        $signature = null;
+        foreach ($root->getElementsByTagName('*') as $node) {
+            if (! in_array(strtolower($node->tagName), ['p', 'h2', 'h3'], true)) continue;
+            $label = mb_strtoupper(preg_replace('/[\s\x{00A0}]+/u', '', $node->textContent) ?? '');
+            if ($requirements === null && str_starts_with($label, 'REQUISITOS') && mb_strlen($label) < 100) {
+                $requirements = $node;
+            }
+            if ($signature === null && str_starts_with($label, 'ATENTAMENTE') && mb_strlen($label) < 100) {
+                $signature = $node;
+            }
+        }
+
+        // Historical templates have only the office name, without a space for a handwritten signature.
+        if ($signature && mb_strtoupper(preg_replace('/[\s\x{00A0}]+/u', '', $signature->textContent) ?? '') === 'ATENTAMENTEDIRECCIÓNDEADMINISTRACIÓNYFINANZAS') {
+            while ($signature->firstChild) $signature->removeChild($signature->firstChild);
+            $signature->setAttribute('style', 'text-align:center');
+            $signature->appendChild($document->createElement('strong', 'ATENTAMENTE'));
+            for ($i = 0; $i < 3; $i++) $signature->appendChild($document->createElement('br'));
+            $signature->appendChild($document->createTextNode('__________________________________'));
+            $signature->appendChild($document->createElement('br'));
+            $signature->appendChild($document->createTextNode('DIRECCIÓN DE ADMINISTRACIÓN Y FINANZAS'));
+        }
+
+        $anchor = $requirements ?: $signature;
+        if ($requirements && mb_strlen(strip_tags($details)) > 5000) {
+            $requirements->setAttribute('class', 'requirements-heading');
+        }
+        foreach (iterator_to_array($annexRoot->childNodes) as $node) {
+            $imported = $document->importNode($node, true);
+            if ($anchor) $anchor->parentNode->insertBefore($imported, $anchor);
+            else $root->appendChild($imported);
+        }
+        $result = '';
+        foreach ($root->childNodes as $node) $result .= $document->saveHTML($node);
+        return $result;
+    }
+
     public function pdf(object $convocation, string $title, string $details, Collection $campuses,
         string $fontFamily = 'dejavusans', float $fontSize = 9): string
     {
@@ -158,6 +210,9 @@ class ConvocationDocuments
                 .($campus->garantia !== null ? '$'.number_format((float) $campus->garantia, 2) : '—').'</td>'
                 .'<td>'.e(\Carbon\Carbon::parse($campus->fecha_inicio)->format('d/m/Y')).'</td></tr>';
         }
+        $annex = '<h2>Anexo I · Planteles participantes</h2>'
+            .'<table class="campus-annex"><thead><tr><th>Plantel</th><th>Dirección</th><th>Espacio</th><th>Matrícula</th><th>Monto</th><th>Garantía</th><th>Inicio</th></tr></thead><tbody>'.$rows.'</tbody></table>';
+        $details = $this->detailsWithAnnex($details, $annex);
         $html = '<html><head><meta charset="UTF-8"><style>
             body{font-family:'.$fontFamily.',sans-serif;color:#29242a;font-size:'.$fontSize.'pt;line-height:1.5}
             .eyebrow{color:#875a16;font-size:8pt;letter-spacing:1px;font-weight:bold;text-transform:uppercase}
@@ -170,21 +225,21 @@ class ConvocationDocuments
             th{background:#611232;color:#fff;text-align:left;padding:7px}
             td{border-bottom:1px solid #ded7d9;padding:7px;vertical-align:top}
             .details p{margin:0 0 9px;text-align:justify}.details li{margin-bottom:5px}
-            .details table td,.details table th{border:1px solid #ded7d9}
+            .details table{line-height:1.2}.details table p{margin:0 0 3px}.details table td,.details table th{border:1px solid #ded7d9}
+            .requirements-heading{page-break-before:always}
+            .campus-annex{page-break-inside:auto}.campus-annex tr{page-break-inside:avoid}
             .footer{color:#776b70;font-size:7pt;margin-top:25px;border-top:1px solid #ded7d9;padding-top:7px}
         </style></head><body>'
             .'<div class="eyebrow">Colegio de Bachilleres del Estado de México · CCyF</div>'
             .'<h1>'.e($title).'</h1><div class="rule"></div>'
             .'<div class="meta">Convocatoria: <strong>'.e($convocation->numero).'</strong> &nbsp;·&nbsp; Servicio: <strong>'.e($convocation->servicio_nombre).'</strong></div>'
             .'<div class="details">'.$details.'</div>'
-            .'<h2>Anexo I · Planteles participantes</h2>'
-            .'<table><thead><tr><th>Plantel</th><th>Dirección</th><th>Espacio</th><th>Matrícula</th><th>Monto</th><th>Garantía</th><th>Inicio</th></tr></thead><tbody>'.$rows.'</tbody></table>'
             .'<div class="footer">Documento generado desde CCyF · '.e(now()->format('d/m/Y H:i')).'</div></body></html>';
 
         $directory = storage_path('app/mpdf');
         if (! is_dir($directory)) mkdir($directory, 0775, true);
         $pdf = new Mpdf(['mode' => 'utf-8', 'format' => [215.9, 355.6], 'tempDir' => $directory,
-            'margin_top' => 22, 'margin_bottom' => 23, 'margin_left' => 17, 'margin_right' => 17,
+            'margin_top' => 16, 'margin_bottom' => 16, 'margin_left' => 17, 'margin_right' => 17,
             'default_font' => $fontFamily, 'default_font_size' => $fontSize]);
         $pdf->SetTitle($title);
         $pdf->WriteHTML($html);

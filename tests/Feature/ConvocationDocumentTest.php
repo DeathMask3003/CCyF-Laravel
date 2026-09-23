@@ -204,6 +204,18 @@ class ConvocationDocumentTest extends TestCase
         $this->assertStringStartsWith('%PDF', $preview->getContent());
     }
 
+    public function test_annex_precedes_requirements_and_signature_stays_at_end(): void
+    {
+        $documents = app(ConvocationDocuments::class);
+        foreach (['Cafetería', 'Fotocopiado'] as $service) {
+            $details = $documents->detailsWithAnnex($documents->defaultTemplate($service),
+                '<h2>Anexo I · Planteles participantes</h2><table><tr><td>Plantel Centro</td></tr></table>');
+            $this->assertLessThan(mb_strpos($details, 'R E Q U I S I T O S'), mb_strpos($details, 'Anexo I · Planteles participantes'));
+            $this->assertLessThan(mb_strpos($details, 'ATENTAMENTE'), mb_strpos($details, 'Plantel Centro'));
+            $this->assertStringContainsString('__________________________________', $details);
+        }
+    }
+
     private function payload(array $override = []): array
     {
         return array_replace_recursive([

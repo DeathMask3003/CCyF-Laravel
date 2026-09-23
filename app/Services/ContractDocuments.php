@@ -42,6 +42,7 @@ class ContractDocuments
         if ($local) return $this->templateCache[$serviceId] = (object) ['id' => $local->id, 'body' => $local->body, 'source' => 'local',
             'institution_signer' => $local->institution_signer, 'institution_role' => $local->institution_role,
             'witness_signer' => $local->witness_signer, 'witness_role' => $local->witness_role,
+            'additional_signers' => json_decode((string) $local->additional_signers, true) ?: [],
             'font_family' => $local->font_family, 'font_size' => (float) $local->font_size,
             'updated_at' => $local->updated_at];
 
@@ -51,6 +52,7 @@ class ContractDocuments
         return $this->templateCache[$serviceId] = (object) ['id' => null, 'body' => $legacy->plantilla_body, 'source' => 'historica',
             'institution_signer' => null, 'institution_role' => null,
             'witness_signer' => null, 'witness_role' => null,
+            'additional_signers' => [],
             'font_family' => 'dejavusans', 'font_size' => 9.0,
             'updated_at' => $legacy->fech_modif ?: $legacy->fech_crea];
     }
@@ -67,6 +69,14 @@ class ContractDocuments
         if ($template->source === 'local') {
             foreach (['institution_signer', 'institution_role', 'witness_signer', 'witness_role'] as $field) {
                 if (! trim((string) $template->{$field})) $issues[] = 'Datos de firmantes';
+            }
+            foreach ([0, 1] as $position) {
+                foreach (['title', 'name', 'role'] as $field) {
+                    if (! trim((string) ($template->additional_signers[$position][$field] ?? ''))) {
+                        $issues[] = 'Datos de las cinco firmas';
+                        break 2;
+                    }
+                }
             }
         }
         if (preg_match('/\*{5,}/', strip_tags($template->body))) {
@@ -114,19 +124,22 @@ class ContractDocuments
             .prices td,.prices th { border:1px solid #bbb; padding:6px; } .prices th { background:#f1ecee; }
             img { max-width:170mm; height:auto; } .draft { color:#8d2d49; font-weight:bold;
                 border:1px solid #d9b3bf; padding:7px 12px; margin-bottom:15px; text-align:center; }
-            .signatures { margin-top:26px; page-break-inside:avoid; width:100%; }
-            .signatures td { width:50%; text-align:center; padding:28px 10px 0; }
-            .witness-signature { width:47%; margin:34px 0 0 53%; text-align:center; page-break-inside:avoid; }
+            .signatures { margin-top:25px; width:100%; }
+            .signatures tr { page-break-inside:avoid; }
+            .signatures td { width:50%; text-align:center; padding:15px 16px 14px; }
+            .signatures .last-signature { width:50%; margin:0 auto; }
+            .signature-title { font-weight:bold; font-size:8pt; margin-bottom:5px; }
+            .signature-space { line-height:13pt; }
             .line { border-top:1px solid #333; padding-top:6px; font-weight:bold; }
+            .signature-role { font-size:8pt; font-weight:normal; }
+            .contract-note { margin-top:13px; padding-top:6px; border-top:1px solid #bbb;
+                color:#666; font-size:7pt; text-align:center; }
             </style></head><body>'
             .($draft ? '<div class="draft">BORRADOR PARA REVISIÓN · No enviar ni firmar</div>' : '')
-            .$html.'<table class="signatures"><tr><td><div class="line">'
-            .e((string) ($template->institution_signer ?: 'FIRMA DEL COBAEM'))
-            .'<br>'.e((string) ($template->institution_role ?: 'POR EL COBAEM')).'</div></td>'
-            .'<td><div class="line">'.e((string) $row->name).'<br>PERMISIONARIO</div></td></tr></table>'
-            .'<div class="witness-signature"><div class="line">'
-            .e((string) ($template->witness_signer ?: 'FIRMA DEL TESTIGO'))
-            .'<br>'.e((string) ($template->witness_role ?: 'TESTIGO')).'</div></div>'
+            .$html.$this->signaturesHtml($template, (string) $row->name)
+            .'<div class="contract-note">No. de Registro CCyF: '.e((string) $row->folio)
+            .' &nbsp;|&nbsp; Convocatoria: '.e((string) $row->convocation)
+            .' &nbsp;|&nbsp; Generado: '.e((string) $values['fecha_hoy']).'</div>'
             .'</body></html>';
 
         $directory = storage_path('app/mpdf');
@@ -136,6 +149,35 @@ class ContractDocuments
         $pdf->showImageErrors = false;
         $pdf->WriteHTML($html);
         return $pdf->Output('', 'S');
+    }
+
+    private function signaturesHtml(object $template, string $permittee): string
+    {
+        $extra = $template->additional_signers;
+        $signers = [
+            ['title' => 'POR EL “COBAEM”', 'name' => $template->institution_signer ?: 'FIRMA PENDIENTE',
+                'role' => $template->institution_role ?: 'CARGO PENDIENTE'],
+            ['title' => 'POR EL “PERMISIONARIO”', 'name' => $permittee, 'role' => ''],
+            ['title' => 'TESTIGOS', 'name' => $template->witness_signer ?: 'FIRMA PENDIENTE',
+                'role' => $template->witness_role ?: 'CARGO PENDIENTE'],
+            ['title' => $extra[0]['title'] ?? 'FIRMANTE 4', 'name' => $extra[0]['name'] ?? 'FIRMA PENDIENTE',
+                'role' => $extra[0]['role'] ?? 'CARGO PENDIENTE'],
+            ['title' => $extra[1]['title'] ?? 'FIRMANTE 5', 'name' => $extra[1]['name'] ?? 'FIRMA PENDIENTE',
+                'role' => $extra[1]['role'] ?? 'CARGO PENDIENTE'],
+        ];
+        $html = '<table class="signatures"><tbody>';
+        foreach ($signers as $index => $signer) {
+            if ($index % 2 === 0) $html .= '<tr>';
+            if ($index === 4) $html .= '<td colspan="2"><div class="last-signature">';
+            else $html .= '<td>';
+            $html .= '<div class="signature-title">'.e((string) $signer['title']).'</div>'
+                .'<div class="signature-space">&nbsp;<br>&nbsp;<br>&nbsp;</div><div class="line">'.e((string) $signer['name'])
+                .'<br><span class="signature-role">'.e((string) $signer['role']).'</span></div>';
+            if ($index === 4) $html .= '</div></td>';
+            else $html .= '</td>';
+            if ($index % 2 === 1 || $index === 4) $html .= '</tr>';
+        }
+        return $html.'</tbody></table>';
     }
 
     public function values(object $row): array
