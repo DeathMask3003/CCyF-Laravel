@@ -96,7 +96,13 @@ class AcceptedProposalTest extends TestCase
         $this->be(LegacyUser::findOrFail(2));
         $this->get('/contratos-permisionarios?servicio=cafeteria')->assertOk()->assertSee('Ana Prueba')
             ->assertSee('02-2026-80')->assertDontSee('02-2026-81');
-        $this->get('/contratos-permisionarios/historico-80')->assertOk()->assertSee('Calle Principal 12');
+        $this->get('/contratos-permisionarios/historico-80')->assertOk()
+            ->assertSee('Calle Principal 12')
+            ->assertSee('Vista previa del contrato')
+            ->assertSee('id="contract-pdf-viewer"', false)
+            ->assertSee('/contratos-permisionarios/historico-80/borrador')
+            ->assertSee('contract-pdf.js')
+            ->assertDontSee('Cargar vista previa aquí');
         $this->get('/contratos-permisionarios/historico-81')->assertNotFound();
     }
 
@@ -136,6 +142,9 @@ class AcceptedProposalTest extends TestCase
         $delivery = DB::table('ccyf_contract_deliveries')->first();
         Storage::disk('local')->assertExists($delivery->pdf_path);
         $this->get('/contratos-permisionarios/historico-80/enviado')->assertOk()->assertHeader('Content-Type','application/pdf');
+        $this->get('/contratos-permisionarios/historico-80')->assertOk()
+            ->assertSee('PDF enviado')
+            ->assertSee('/contratos-permisionarios/historico-80/enviado');
         $this->post('/contratos-permisionarios/historico-80/enviar')->assertStatus(409);
     }
 

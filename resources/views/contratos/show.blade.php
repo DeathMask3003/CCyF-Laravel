@@ -1,10 +1,26 @@
 @extends('layouts.app')
-@push('head')<link rel="stylesheet" href="{{ asset('css/contratos.css') }}">@endpush
+@push('head')<link rel="stylesheet" href="{{ asset('css/contratos.css') }}?v=20260922-2">@endpush
 @section('title', 'Contrato '.$row->folio)
 @section('content')
 <a class="back-link" href="{{ route('contratos.index', ['servicio'=>$row->service]) }}">← Volver a propuestas aceptadas</a>
 <div class="page-heading contract-heading"><div><span class="eyebrow">{{ $row->service === 'cafeteria' ? 'Cafetería' : 'Fotocopiado' }} · {{ $row->convocation }}</span><h1>Contrato de {{ $row->name ?: 'permisionario' }}</h1><p>Expediente {{ $row->folio }} · {{ $row->campus }}</p></div><span @class(['contract-status', 'sent' => $row->sent, 'pending' => !$row->sent && $missing, 'ready' => !$row->sent && !$missing])>{{ $row->sent ? 'Enviado' : ($missing ? 'Requiere revisión' : 'Listo para revisión') }}</span></div>
 @if($errors->any())<div class="form-errors" role="alert"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+@php
+    $hasSentPdf = $row->delivery?->sent_at && $row->delivery?->pdf_path;
+    $previewUrl = $hasSentPdf ? route('contratos.sent-pdf', $row->key) : ($template ? route('contratos.preview', $row->key) : null);
+@endphp
+<section class="panel contract-preview-card" id="contract-preview" aria-labelledby="contract-preview-title">
+    <div class="contract-preview-head"><div><span class="eyebrow">Vista previa del contrato</span><h2 id="contract-preview-title">{{ $hasSentPdf ? 'PDF enviado' : 'Borrador PDF' }}</h2><p>{{ $hasSentPdf ? 'Esta es la versión que se envió al destinatario.' : 'Revisa todas las páginas y los datos guardados antes de enviarlo.' }}</p></div>
+        @if($previewUrl)<a class="contract-outline" href="{{ $previewUrl }}" target="_blank" rel="noopener">Abrir PDF en otra pestaña ↗</a>@endif
+    </div>
+    @if($previewUrl)
+        <div class="contract-pdf-viewer" id="contract-pdf-viewer" data-url="{{ $previewUrl }}" aria-label="Páginas del contrato">
+            <div class="contract-pdf-scroll" id="contract-pdf-scroll"><div class="contract-pdf-pages" id="contract-pdf-pages"><p class="contract-pdf-loading" role="status">Preparando vista previa del contrato…</p></div></div>
+            <div class="contract-pdf-controls" aria-label="Controles de vista previa"><button type="button" id="contract-pdf-prev" aria-label="Página anterior">←</button><span id="contract-pdf-count">Página 1 de 1</span><button type="button" id="contract-pdf-next" aria-label="Página siguiente">→</button><span class="contract-pdf-divider" aria-hidden="true"></span><button type="button" id="contract-pdf-zoom-out" aria-label="Reducir zoom">−</button><span id="contract-pdf-zoom">100 %</span><button type="button" id="contract-pdf-zoom-in" aria-label="Aumentar zoom">+</button></div>
+        </div>
+        <p class="contract-mobile-tip">Puedes recorrer todas las páginas aquí. En iPad también puedes abrir el PDF a pantalla completa.</p>
+    @else<div class="contract-empty">Configura una plantilla para generar el borrador PDF.</div>@endif
+</section>
 <div class="contract-detail-layout">
     <section class="panel contract-detail-card"><span class="eyebrow">01 · Datos del contrato</span><h2>Información principal</h2><dl class="contract-data-grid">
         <div><dt>Permisionario</dt><dd>{{ $row->name ?: '—' }}</dd></div><div><dt>Servicio</dt><dd>{{ $row->service === 'cafeteria' ? 'Cafetería' : 'Fotocopiado' }}</dd></div>
@@ -42,8 +58,9 @@
     </div><div class="contract-terms-actions"><p>Confirma nombres y tildes con la INE. Una nueva versión sustituirá estos valores solo en el contrato.</p><button class="button" type="submit">Guardar ajustes</button></div></form>@endif
     @if($termHistory->isNotEmpty())<div class="contract-term-history"><h3>Historial de ajustes</h3>@foreach($termHistory as $version)<details><summary>Versión #{{ $version->id }} · {{ $version->editor ?: 'Usuario' }} · {{ \Carbon\Carbon::parse($version->created_at)->format('d/m/Y H:i') }}</summary><p>Nombre: {{ $version->name ?: '—' }} · Monto: {{ $version->amount !== null ? '$'.number_format((float)$version->amount,2) : '—' }} · Vigencia: {{ $version->starts ?: '—' }} a {{ $version->ends ?: '—' }} · Correo: {{ $version->email ?: '—' }}</p></details>@endforeach</div>@endif
 </details></section>
-<section class="panel contract-preview-card"><div class="contract-preview-head"><div><span class="eyebrow">Vista previa</span><h2>Borrador PDF</h2><p>Revisa el texto y los datos antes de enviarlo. El borrador lleva una marca visible.</p></div>@if($template)<a class="contract-outline" href="{{ route('contratos.preview', $row->key) }}" target="_blank" rel="noopener">Abrir PDF en otra pestaña ↗</a>@endif</div>
-    @if($template)<div class="contract-pdf-shell"><button type="button" class="button" id="contract-load-pdf" data-url="{{ route('contratos.preview', $row->key) }}">Cargar vista previa aquí</button><iframe id="contract-pdf-frame" title="Borrador del contrato" hidden></iframe></div><p class="contract-mobile-tip">En iPad o teléfono, usa “Abrir PDF en otra pestaña” para verlo a pantalla completa.</p>@else<div class="contract-empty">Configura una plantilla para generar el borrador.</div>@endif
-</section>
-@push('scripts')<script>document.getElementById('contract-load-pdf')?.addEventListener('click',function(){const frame=document.getElementById('contract-pdf-frame');frame.src=this.dataset.url;frame.hidden=false;this.hidden=true;});</script>@endpush
+@if($previewUrl)
+    @push('scripts')
+        <script type="module" src="{{ asset('js/contract-pdf.js') }}?v=20260922-1"></script>
+    @endpush
+@endif
 @endsection
