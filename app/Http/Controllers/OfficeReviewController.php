@@ -142,7 +142,7 @@ class OfficeReviewController extends Controller
             'nombre' => $registration->usu_area,
         ];
 
-        return $evaluation->pdf($item, $source, $prevaluations->detail($item));
+        return $evaluation->pdf($item, $source, $prevaluations->detail($item), $request->user());
     }
 
     public function localFinalEvaluationPdf(int $record, Request $request, LegacyMenu $menu,
@@ -164,7 +164,7 @@ class OfficeReviewController extends Controller
             'nombre' => $registration->solicitante,
         ];
 
-        return $evaluation->pdf($item, $source, $prevaluations->detail($item));
+        return $evaluation->pdf($item, $source, $prevaluations->detail($item), $request->user());
     }
 
     public function historicalResultPdf(int $record, Request $request, LegacyMenu $menu, FinishedResultPdf $resultPdf): BinaryFileResponse

@@ -1,6 +1,9 @@
 @extends('layouts.app')
 
 @section('title', 'Mi perfil')
+@push('head')
+<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20260923-1">
+@endpush
 
 @section('content')
 <div class="page-heading profile-heading">
@@ -36,6 +39,27 @@
     </section>
 
     <div class="profile-side">
+        @if ($canManageSignature)
+        <section class="panel profile-panel signature-panel" aria-labelledby="signature-title">
+            <span class="eyebrow">Uso administrativo</span><h2 id="signature-title">Mi firma</h2>
+            <p class="muted">La imagen se utilizará en la hoja final de evaluación cuando tu perfil corresponda a uno de los firmantes.</p>
+            <div class="signature-preview" id="signature-preview">
+                @if ($signatureAvailable)
+                    <img src="{{ route('perfil.signature') }}" alt="Firma actual de {{ $user->usu_area }}" id="signature-image">
+                @else
+                    <span id="signature-empty">Aún no tienes una imagen de firma cargada.</span>
+                @endif
+            </div>
+            <form method="post" action="{{ route('perfil.signature-upload') }}" enctype="multipart/form-data" class="signature-form">
+                @csrf
+                <label for="firma">Cargar imagen de firma</label>
+                <input id="firma" name="firma" type="file" accept="image/png,image/jpeg,image/webp" required>
+                <small class="field-help">PNG, JPG o WEBP, máximo 2 MB. Recomendamos PNG con fondo transparente.</small>
+                @error('firma')<small class="field-error">{{ $message }}</small>@enderror
+                <button class="button" type="submit">Guardar firma</button>
+            </form>
+        </section>
+        @endif
         <section class="panel profile-panel" aria-labelledby="password-title">
             <span class="eyebrow">Seguridad</span><h2 id="password-title">Cambiar contraseña</h2><p class="muted">Usa al menos 10 caracteres, mayúsculas, minúsculas y números.</p>
             <form method="post" action="{{ route('perfil.password') }}" class="profile-password-form">
@@ -54,5 +78,18 @@
         </section>
     </div>
 </div>
-<script>document.querySelectorAll('.uppercase-field').forEach(el => el.addEventListener('input', () => { const start = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(start, start); }));</script>
+<script>
+document.querySelectorAll('.uppercase-field').forEach(el => el.addEventListener('input', () => { const start = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(start, start); }));
+const signatureInput = document.getElementById('firma');
+signatureInput?.addEventListener('change', () => {
+    const file = signatureInput.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const preview = document.getElementById('signature-preview');
+    let image = document.getElementById('signature-image');
+    if (!image) { image = document.createElement('img'); image.id = 'signature-image'; image.alt = 'Vista previa de tu firma'; preview.replaceChildren(image); }
+    const url = URL.createObjectURL(file);
+    image.onload = () => URL.revokeObjectURL(url);
+    image.src = url;
+});
+</script>
 @endsection

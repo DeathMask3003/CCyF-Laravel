@@ -34,6 +34,8 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/panel', fn () => view('dashboard'))->name('dashboard');
     Route::post('/salir', [AccessController::class, 'destroy'])->name('logout');
     Route::get('/mi-perfil', [ProfileController::class, 'show'])->name('perfil.show');
+    Route::get('/mi-perfil/firma', [ProfileController::class, 'signature'])->name('perfil.signature');
+    Route::post('/mi-perfil/firma', [ProfileController::class, 'uploadSignature'])->middleware('throttle:5,1')->name('perfil.signature-upload');
     Route::put('/mi-perfil', [ProfileController::class, 'update'])->name('perfil.update');
     Route::put('/mi-perfil/contrasena', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('perfil.password');
     Route::get('/ubicaciones', [LocationController::class, 'index'])->name('ubicaciones.index');

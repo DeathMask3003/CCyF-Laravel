@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\LegacyUser;
 use App\Services\MexicanPhone;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Schema\Blueprint;
 use Tests\TestCase;
 
@@ -54,6 +56,37 @@ class ProfileLocationTest extends TestCase
         $this->put('/mi-perfil/contrasena', ['current_password' => 'ClaveVieja123', 'password' => 'ClaveNueva123', 'password_confirmation' => 'ClaveNueva123'])
             ->assertRedirect()->assertSessionHasNoErrors();
         $this->assertTrue(Hash::check('ClaveNueva123', DB::table('ccyf_usuarios')->where('usu_id', 1)->value('usu_pass')));
+    }
+
+    public function test_staff_can_upload_and_view_a_signature_but_contestants_cannot(): void
+    {
+        Storage::fake('local');
+        $root = Storage::disk('local')->path('e-signs');
+        mkdir($root, 0777, true);
+        config()->set('ccyf.legacy_signatures_root', $root);
+
+        $this->be(LegacyUser::findOrFail(1));
+        $this->get('/mi-perfil')->assertOk()->assertSee('Mi firma')->assertSee('Cargar imagen de firma');
+        $this->get('/mi-perfil/firma')->assertNotFound();
+        $this->post('/mi-perfil/firma', [
+            'firma' => UploadedFile::fake()->create('archivo.php', 1, 'application/x-php'),
+        ])->assertSessionHasErrors('firma');
+        $this->post('/mi-perfil/firma', [
+            'firma' => UploadedFile::fake()->image('firma.png', 300, 120),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertFileExists($root.DIRECTORY_SEPARATOR.'users'.DIRECTORY_SEPARATOR.'1'
+            .DIRECTORY_SEPARATOR.'public'.DIRECTORY_SEPARATOR.'firma.png');
+        $this->get('/mi-perfil/firma')->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get('/mi-perfil')->assertOk()->assertSee('/mi-perfil/firma', false);
+
+        $this->be(LegacyUser::findOrFail(2));
+        $this->get('/mi-perfil')->assertOk()->assertDontSee('Cargar imagen de firma');
+        $this->get('/mi-perfil/firma')->assertForbidden();
+        $this->post('/mi-perfil/firma', [
+            'firma' => UploadedFile::fake()->image('otra.png', 300, 120),
+        ])->assertForbidden();
+        $this->assertFileDoesNotExist($root.DIRECTORY_SEPARATOR.'users'.DIRECTORY_SEPARATOR.'2'
+            .DIRECTORY_SEPARATOR.'public'.DIRECTORY_SEPARATOR.'firma.png');
     }
 
     public function test_locations_are_private_and_coordinates_are_validated(): void

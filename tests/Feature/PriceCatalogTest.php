@@ -25,6 +25,7 @@ class PriceCatalogTest extends TestCase
         config()->set('database.connections.legacy', ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
         DB::purge('sqlite');
         DB::purge('legacy');
+        config()->set('ccyf.legacy_signatures_root', sys_get_temp_dir().DIRECTORY_SEPARATOR.'ccyf-no-signatures');
         $this->artisan('migrate', ['--database' => 'sqlite', '--force' => true]);
 
         Schema::connection('legacy')->create('tm_usuario', function (Blueprint $table): void {

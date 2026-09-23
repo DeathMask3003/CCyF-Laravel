@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Services\LegacyPasswordVerifier;
 use App\Services\MexicanPhone;
+use App\Services\SignatureImages;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password;
@@ -13,7 +15,7 @@ use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
-    public function show(Request $request): View
+    public function show(Request $request, SignatureImages $signatures): View
     {
         return view('perfil.show', [
             'user' => $request->user(),
@@ -22,7 +24,37 @@ class ProfileController extends Controller
             'ip' => $request->ip(),
             'agent' => $request->userAgent(),
             'lastLocation' => DB::table('ccyf_ubicaciones')->where('usu_id', $request->user()->getKey())->orderByDesc('fecha_registro')->first(),
+            'canManageSignature' => $signatures->canView($request->user()),
+            'signatureAvailable' => $signatures->pathFor($request->user()) !== null,
         ]);
+    }
+
+    public function signature(Request $request, SignatureImages $signatures): BinaryFileResponse
+    {
+        abort_unless($signatures->canView($request->user()), 403);
+        $path = $signatures->pathFor($request->user());
+        abort_unless($path, 404);
+
+        $response = response()->file($path, [
+            'Content-Type' => getimagesize($path)['mime'],
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+        $response->setPrivate();
+        $response->headers->addCacheControlDirective('no-store');
+
+        return $response;
+    }
+
+    public function uploadSignature(Request $request, SignatureImages $signatures): RedirectResponse
+    {
+        abort_unless($signatures->canView($request->user()), 403);
+        $data = $request->validate([
+            'firma' => ['required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048',
+                'dimensions:max_width=3000,max_height=3000'],
+        ]);
+        $signatures->save($request->user(), $data['firma']);
+
+        return back()->with('status', 'Tu firma se actualizó correctamente.');
     }
 
     public function update(Request $request): RedirectResponse

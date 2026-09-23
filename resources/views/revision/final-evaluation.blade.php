@@ -6,8 +6,7 @@
 @endphp
 <style>
     body { font-family: dejavusans; color: #302930; font-size: 8pt; }
-    .brand { color: #7e2039; font-size: 10pt; font-weight: bold; border-bottom: 2px solid #7e2039; padding-bottom: 7px; }
-    h1 { color: #7e2039; text-align: center; font-size: 12pt; margin: 13px 0 1px; }
+    h1 { color: #7e2039; text-align: center; font-size: 12pt; margin: 0 0 1px; }
     .subtitle { color: #7e2039; text-align: center; font-weight: bold; font-size: 9pt; margin: 0 0 11px; }
     h2 { background: #8c2236; color: white; font-size: 8pt; padding: 6px; margin: 12px 0 0; }
     table { border-collapse: collapse; width: 100%; table-layout: fixed; }
@@ -24,7 +23,6 @@
     .next-page { page-break-before: always; }
     .result-block { page-break-inside: avoid; }
 </style>
-<div class="brand">COBAEM · Coordinación de Cafeterías y Fotocopiado</div>
 <h1>HOJA FINAL DE EVALUACIÓN DE DOCUMENTACIÓN</h1>
 <div class="subtitle">SERVICIO DE {{ $service }}</div>
 
@@ -35,7 +33,6 @@
     <tr><td class="info-label">Nombre del interesado</td><td>{{ $record->nombre ?: 'Sin nombre registrado' }}</td></tr>
     <tr><td class="info-label">Prevaluador</td><td>{{ $evaluator ?: 'Sin nombre registrado' }}</td></tr>
     <tr><td class="info-label">Fecha de evaluación</td><td>{{ $evaluatedAt }}</td></tr>
-    <tr><td class="info-label">Fecha de consulta</td><td>{{ now()->format('d/m/Y H:i') }}</td></tr>
 </table>
 
 <h2>EVALUACIÓN DE DOCUMENTOS</h2>
@@ -68,5 +65,5 @@
     @if ($detail['adminNote'])
         <p class="note"><strong>Observaciones del administrador:</strong> {{ $detail['adminNote'] }}</p>
     @endif
-    <p class="source">Reporte generado al consultar los datos de prevaluación guardados. La copia digital no incorpora imágenes de firmas históricas.</p>
+    <p class="source">Reporte generado desde la prevaluación registrada.</p>
 </div>
