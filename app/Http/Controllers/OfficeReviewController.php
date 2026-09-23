@@ -64,11 +64,12 @@ class OfficeReviewController extends Controller
         $files = DB::table('ccyf_registro_archivos as archivo')
             ->join('ccyf_requisitos_documento as requisito', 'requisito.id', '=', 'archivo.requisito_id')
             ->where('archivo.registro_id', $record)->orderBy('requisito.orden')
-            ->get(['archivo.id', 'archivo.requisito_id', 'archivo.nombre_original', 'archivo.bytes', 'requisito.nombre'])
+            ->get(['archivo.id', 'archivo.requisito_id', 'archivo.nombre_original', 'archivo.mime', 'archivo.bytes', 'requisito.nombre'])
             ->map(function ($item) use ($record, $documentFiles): object {
                 $updated = $documentFiles->latest('actual', $record, 'req-'.$item->requisito_id);
                 if ($updated) {
                     $item->nombre_original = $updated->original_name;
+                    $item->mime = $updated->mime;
                     $item->bytes = $updated->bytes;
                 }
                 return $item;
@@ -94,12 +95,17 @@ class OfficeReviewController extends Controller
         $service = (int) $registration->trami_id === 3 ? 'cafeteria' : 'fotocopiado';
         $requirements = collect(PrevaluationCatalog::documents($service))
             ->filter(fn ($label, $key) => $documentFiles->effective('historico', $record, $key) !== null);
+        $previewDocuments = $requirements->map(fn ($label, $key) => [
+            'label' => $label,
+            'mime' => $documentFiles->effective('historico', $record, $key)['mime'],
+            'url' => route('revision.historical-file', [$record, $key]),
+        ]);
         $resultadoPdfDisponible = $resultPdf->historical($record, (int) $registration->doc_designado === 1) !== null;
         $evaluacionRegistrada = DB::connection('legacy')
             ->table($service === 'cafeteria' ? 'tm_eval_cafe' : 'tm_evaluaciones')
             ->where('doc_id', $record)->exists();
 
-        return view('revision.historical', compact('registration', 'requirements', 'resultadoPdfDisponible', 'evaluacionRegistrada'));
+        return view('revision.historical', compact('registration', 'requirements', 'previewDocuments', 'resultadoPdfDisponible', 'evaluacionRegistrada'));
     }
 
     public function historicalResultPdf(int $record, Request $request, LegacyMenu $menu, FinishedResultPdf $resultPdf): BinaryFileResponse
@@ -198,7 +204,12 @@ class OfficeReviewController extends Controller
 
     private function sendDocument(array $file, string $name): BinaryFileResponse
     {
-        $response = response()->download($file['path'], $name, ['Content-Type' => $file['mime']]);
+        $inline = in_array($file['mime'], ['application/pdf', 'image/jpeg', 'image/png'], true);
+        $response = $inline ? response()->file($file['path'], ['Content-Type' => $file['mime']])
+            : response()->download($file['path'], $name, ['Content-Type' => $file['mime']]);
+        if ($inline) {
+            $response->setContentDisposition('inline', $name);
+        }
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->setPrivate();
         $response->headers->addCacheControlDirective('no-store');

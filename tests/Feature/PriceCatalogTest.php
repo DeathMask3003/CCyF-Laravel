@@ -594,8 +594,36 @@ class PriceCatalogTest extends TestCase
         $this->asUser(1);
         $this->get('/convocatorias-finalizadas/historico/700/archivo/prop_escrito')->assertOk()
             ->assertHeader('Content-Type', 'application/pdf')
-            ->assertHeader('Content-Disposition', 'attachment; filename=prop_escrito-700.pdf');
+            ->assertHeader('Content-Disposition', 'inline; filename=prop_escrito-700.pdf');
+        $this->get('/convocatorias-finalizadas/historico/700')->assertOk()
+            ->assertSee('data-review-document')->assertSee('Ver en modal');
         $this->get('/convocatorias-finalizadas/historico/700/archivo/acta_nac')->assertNotFound();
+    }
+
+    public function test_pending_and_finished_current_documents_open_in_the_same_modal(): void
+    {
+        Storage::fake('local');
+        $record = $this->reviewRecord();
+        $requirement = app(RegistrationRequirements::class)->activeFor(1)->first();
+        Storage::disk('local')->put('review/propuesta.pdf', '%PDF-1.4 test');
+        $file = DB::table('ccyf_registro_archivos')->insertGetId([
+            'registro_id' => $record, 'requisito_id' => $requirement->id,
+            'ruta' => 'review/propuesta.pdf', 'nombre_original' => 'propuesta.pdf',
+            'mime' => 'application/pdf', 'bytes' => 13,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->asUser(1);
+        $this->get('/expedientes/'.$record)->assertOk()
+            ->assertSee('data-review-document')->assertSee('Ver en modal')
+            ->assertDontSee('Descargar PDF');
+        $this->get('/expedientes/'.$record.'/archivos/'.$file)->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'inline; filename=documento-'.$file.'.pdf');
+        DB::table('ccyf_registros')->where('id', $record)->update([
+            'estado' => 'Finalizado', 'decision' => 'no_designado', 'respuesta' => 'No designado',
+        ]);
+        $this->get('/expedientes/'.$record)->assertOk()
+            ->assertSee('data-review-document')->assertSee('Ver en modal');
     }
 
     public function test_final_result_pdf_uses_the_recorded_designation_and_requires_access(): void
