@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AccessController;
 use App\Http\Controllers\AcceptedProposalController;
 use App\Http\Controllers\CampusController;
 use App\Http\Controllers\ConvocationController;
+use App\Http\Controllers\ConvocationDocumentController;
 use App\Http\Controllers\ConvocationLinkController;
 use App\Http\Controllers\CcyfRoleController;
 use App\Http\Controllers\CcyfUserController;
@@ -71,6 +72,13 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/nuevo-oficio/registros/{record}', [NewOfficeController::class, 'receipt'])->whereNumber('record')->name('oficios.receipt');
 
     Route::get('/convocatorias-pendientes', [OfficeReviewController::class, 'pending'])->name('revision.pending');
+    Route::get('/emision-convocatorias', [ConvocationDocumentController::class, 'index'])->name('emision.index');
+    Route::get('/emision-convocatorias/nueva', [ConvocationDocumentController::class, 'create'])->name('emision.create');
+    Route::match(['post', 'put'], '/emision-convocatorias/vista-previa', [ConvocationDocumentController::class, 'previewDraft'])->name('emision.preview-draft');
+    Route::post('/emision-convocatorias', [ConvocationDocumentController::class, 'store'])->name('emision.store');
+    Route::get('/emision-convocatorias/{document}/editar', [ConvocationDocumentController::class, 'edit'])->whereNumber('document')->name('emision.edit');
+    Route::put('/emision-convocatorias/{document}', [ConvocationDocumentController::class, 'update'])->whereNumber('document')->name('emision.update');
+    Route::get('/emision-convocatorias/{document}/pdf', [ConvocationDocumentController::class, 'pdf'])->whereNumber('document')->name('emision.pdf');
     Route::post('/convocatorias-pendientes/no-aceptadas', [OfficeReviewController::class, 'rejectBulk'])->name('revision.reject-bulk');
     Route::get('/convocatorias-finalizadas', [OfficeReviewController::class, 'finished'])->name('revision.finished');
     Route::get('/convocatorias-finalizadas/exportar/{format}', [FinishedExportController::class, 'download'])

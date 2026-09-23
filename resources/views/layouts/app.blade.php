@@ -29,6 +29,7 @@
                 @php($canPreval = $ccyfMenu->allows(auth()->user(), 'prevaluacion') || $ccyfMenu->allows(auth()->user(), 'Prevaluaciones_admin'))
                 @php($canDocumentAdmin = $ccyfMenu->allows(auth()->user(), 'actualiza_docs'))
                 @php($canContracts = $ccyfMenu->allows(auth()->user(), 'Permisionarios_aceptados_vujeig'))
+                @php($canIssue = $ccyfMenu->allows(auth()->user(), 'convocatorias'))
                 @php($canUsers = $ccyfMenu->allows(auth()->user(), 'Usuarios'))
                 @php($canRoles = $ccyfMenu->allows(auth()->user(), 'Rol'))
                 <nav class="main-nav" aria-label="Menú principal">
@@ -37,6 +38,7 @@
                         <a href="{{ route('oficios.index') }}" @class(['active' => request()->routeIs('oficios.*')])>Nuevo registro</a>
                     @endif
                     @if ($canPending)<a href="{{ route('revision.pending') }}" aria-label="Convocatorias pendientes" @class(['active' => request()->routeIs('revision.pending')])>Pendientes</a>@endif
+                    @if ($canIssue)<a href="{{ route('emision.index') }}" @class(['active' => request()->routeIs('emision.*')])>Convocatorias</a>@endif
                     @if ($canFinished)<a href="{{ route('revision.finished') }}" aria-label="Convocatorias finalizadas" @class(['active' => request()->routeIs('revision.finished', 'revision.historical')])>Finalizadas</a>@endif
                     @if ($canTracking)<a href="{{ route('seguimiento.index') }}" @class(['active' => request()->routeIs('seguimiento.*')])>Seguimiento</a>@endif
                     @if ($canPreval)<a href="{{ route('prevaluaciones.index') }}" @class(['active' => request()->routeIs('prevaluaciones.*')])>Prevaluaciones</a>@endif
