@@ -109,7 +109,7 @@ class ContractDocuments
         $html = '<!doctype html><html lang="es"><head><meta charset="UTF-8"><style>
             @page { margin: 21mm 19mm 22mm; }
             body { font-family: '.$family.'; color:#202020; font-size:'.$size.'pt; line-height:1.4; }
-            p { margin:0 0 7px; text-align:left; } h1,h2,h3 { margin:0 0 9px; text-align:center; }
+            p { margin:0 0 7px; text-align:justify; } h1,h2,h3 { margin:0 0 9px; text-align:center; }
             table { width:100%; border-collapse:collapse; } td,th { vertical-align:top; padding:3px; }
             .prices td,.prices th { border:1px solid #bbb; padding:6px; } .prices th { background:#f1ecee; }
             img { max-width:170mm; height:auto; } .draft { color:#8d2d49; font-weight:bold;
@@ -235,14 +235,27 @@ class ContractDocuments
                     $node->removeChild($child);
                     continue;
                 }
+                $alignment = null;
+                $alignable = in_array(strtolower($child->tagName),
+                    ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'li', 'td', 'th'], true);
                 foreach (iterator_to_array($child->attributes) as $attribute) {
                     $name = strtolower($attribute->name);
                     $value = $attribute->value;
+                    if ($alignable && $name === 'style'
+                        && preg_match('/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i', $value, $match)) {
+                        $alignment = strtolower($match[1]);
+                    }
+                    if ($alignable && $name === 'align'
+                        && in_array(strtolower($value), ['left', 'center', 'right', 'justify'], true)
+                        && $alignment === null) {
+                        $alignment = strtolower($value);
+                    }
                     $safeSpan = in_array($name, ['colspan', 'rowspan'], true) && ctype_digit($value) && (int) $value <= 12;
                     $safeImage = $name === 'src' && $child->tagName === 'img'
                         && preg_match('#^data:image/(png|jpeg|gif);base64,[A-Za-z0-9+/=]+$#', $value);
                     if (! $safeSpan && ! $safeImage) $child->removeAttributeNode($attribute);
                 }
+                if ($alignment !== null) $child->setAttribute('style', 'text-align:'.$alignment);
                 $this->cleanNode($child);
             } elseif (! in_array($child->nodeType, [XML_TEXT_NODE], true)) {
                 $node->removeChild($child);

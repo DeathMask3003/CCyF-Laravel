@@ -203,6 +203,23 @@ class AcceptedProposalTest extends TestCase
         $this->post('/contratos-permisionarios/plantilla/cafeteria', $data)->assertSessionHasErrors('font_size');
     }
 
+    public function test_contract_alignment_is_saved_and_used_by_pdf_preview(): void
+    {
+        $this->be(LegacyUser::findOrFail(2));
+        $this->get('/contratos-permisionarios/plantilla/cafeteria')->assertOk()
+            ->assertSee('Justificar texto')->assertSee('Centrar texto');
+        $body = '<p style="text-align:center;color:red">{permisionario} prestará el servicio en {plantel} por {monto}.</p>'
+            .'<p align="justify">La vigencia será de {fecha_ini} a {fecha_fin}. Las cláusulas siguientes se justifican en el documento.</p>';
+        $this->post('/contratos-permisionarios/plantilla/cafeteria', $this->reviewedTemplate($body))
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $saved = DB::table('ccyf_contract_templates')->value('body');
+        $this->assertStringContainsString('style="text-align:center"', $saved);
+        $this->assertStringContainsString('style="text-align:justify"', $saved);
+        $this->assertStringNotContainsString('color:red', $saved);
+        $this->get('/contratos-permisionarios/historico-80/borrador')->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+    }
+
     public function test_historical_sent_flag_blocks_changes_even_without_a_date(): void
     {
         $this->be(LegacyUser::findOrFail(2));
