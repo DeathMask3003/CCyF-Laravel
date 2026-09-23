@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\LegacyMenu;
 use App\Services\DocumentFiles;
+use App\Services\InstitutionalPdfHeader;
 use App\Services\PrevaluationRecords;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -213,11 +214,13 @@ class PrevaluationController extends Controller
         File::ensureDirectoryExists($temp);
         $pdf = new Mpdf([
             'mode' => 'utf-8', 'format' => 'A4', 'tempDir' => $temp,
-            'margin_left' => 12, 'margin_right' => 12, 'margin_top' => 14, 'margin_bottom' => 18,
+            'margin_left' => 12, 'margin_right' => 12, 'margin_top' => 31,
+            'margin_bottom' => 18, 'margin_header' => 6,
             'default_font' => 'dejavusans',
         ]);
         $pdf->SetTitle('Prevaluación de precios · '.$record->nombre);
         $pdf->SetAuthor('CCyF CoBaEMex');
+        InstitutionalPdfHeader::apply($pdf, 185);
         $pdf->SetHTMLFooter('<div style="border-top:1px solid #d8c9ce;padding-top:5px;color:#70656a;font-size:7pt;text-align:right">CCyF · Página {PAGENO} de {nbpg}</div>');
         $pdf->WriteHTML($html);
         $bytes = $pdf->Output('', Destination::STRING_RETURN);

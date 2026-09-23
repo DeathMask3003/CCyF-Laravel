@@ -7,8 +7,7 @@
 @endphp
 <style>
     body { font-family: dejavusans; color: #2c2529; font-size: 8pt; }
-    .brand { color: #7e2039; font-size: 11pt; font-weight: bold; border-bottom: 2px solid #7e2039; padding-bottom: 6px; }
-    h1 { color: #7e2039; text-align: center; font-size: 12pt; margin: 12px 0 1px; }
+    h1 { color: #7e2039; text-align: center; font-size: 12pt; margin: 0 0 1px; }
     .subtitle { color: #7e2039; text-align: center; font-weight: bold; font-size: 9pt; margin: 0 0 11px; }
     h2 { background: #8c2236; color: white; font-size: 8pt; text-align: center; padding: 6px; margin: 11px 0 0; }
     table { border-collapse: collapse; width: 100%; table-layout: fixed; }
@@ -24,7 +23,6 @@
     .signature-line { border-top: 1px solid #777; width: 48%; margin: auto; padding-top: 4px; }
     .note { color: #675e62; font-size: 7pt; text-align: center; margin-top: 10px; }
 </style>
-<div class="brand">COBAEM · Coordinación de Cafeterías y Fotocopiado</div>
 <h1>REPORTE DE PREVALUACIÓN DE DOCUMENTACIÓN Y PRECIOS</h1>
 <div class="subtitle">SERVICIO DE {{ $label }}</div>
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\FinishedRecords;
+use App\Services\InstitutionalPdfHeader;
 use App\Services\LegacyMenu;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -113,8 +114,7 @@ class FinishedExportController extends Controller
 
     private function pdf(array $rows, string $scope, string $filename): Response
     {
-        $html = '<div class="brand">CCyF <small>COBAEMEX</small></div>';
-        $html .= '<h1>Convocatorias finalizadas</h1>';
+        $html = '<h1>Convocatorias finalizadas</h1>';
         $html .= '<p class="meta">'.e($scope).' &nbsp; | &nbsp; '.count($rows).' registros &nbsp; | &nbsp; '.now()->format('d/m/Y H:i').'</p>';
         $html .= '<table><thead><tr>';
         foreach (self::HEADERS as $header) {
@@ -139,15 +139,16 @@ class FinishedExportController extends Controller
         File::ensureDirectoryExists($temp);
         $pdf = new Mpdf([
             'mode' => 'utf-8', 'format' => 'Legal-L', 'tempDir' => $temp,
-            'margin_left' => 9, 'margin_right' => 9, 'margin_top' => 13, 'margin_bottom' => 15,
+            'margin_left' => 9, 'margin_right' => 9, 'margin_top' => 31,
+            'margin_bottom' => 15, 'margin_header' => 6,
             'default_font' => 'dejavusans',
         ]);
         $pdf->SetTitle('CCyF - Convocatorias finalizadas');
         $pdf->SetAuthor('CCyF CoBaEMex');
+        InstitutionalPdfHeader::apply($pdf);
         $pdf->SetHTMLFooter('<div style="border-top:1px solid #d9c9cf;padding-top:5px;color:#74646c;font-size:7pt;text-align:right">CCyF · Página {PAGENO} de {nbpg}</div>');
         $pdf->WriteHTML('<style>
             body{font-family:dejavusans;color:#2b2026;font-size:8pt}
-            .brand{font-size:12pt;font-weight:bold;color:#611232}.brand small{font-size:7pt;letter-spacing:2px}
             h1{font-size:17pt;color:#611232;margin:5px 0 3px}.meta{font-size:8pt;color:#71646b;margin:0 0 12px}
             table{border-collapse:collapse;width:100%;table-layout:fixed}thead{display:table-header-group}
             th{background:#611232;color:#fff;padding:7px 5px;font-size:7pt;text-align:left;border:1px solid #611232}

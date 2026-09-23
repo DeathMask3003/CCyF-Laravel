@@ -117,7 +117,6 @@ class ContractDocuments
         $family = $template->font_family;
         $size = min(14, max(7, (float) $template->font_size));
         $html = '<!doctype html><html lang="es"><head><meta charset="UTF-8"><style>
-            @page { margin: 21mm 19mm 22mm; }
             body { font-family: '.$family.'; color:#202020; font-size:'.$size.'pt; line-height:1.4; }
             p { margin:0 0 7px; text-align:justify; } h1,h2,h3 { margin:0 0 9px; text-align:center; }
             table { width:100%; border-collapse:collapse; } td,th { vertical-align:top; padding:3px; }
@@ -145,8 +144,12 @@ class ContractDocuments
         $directory = storage_path('app/mpdf');
         if (! is_dir($directory)) mkdir($directory, 0775, true);
         $pdf = new Mpdf(['mode' => 'utf-8', 'format' => 'Letter', 'tempDir' => $directory,
+            'mirrorMargins' => true,
+            'margin_top' => 32, 'margin_header' => 6, 'margin_bottom' => 22,
+            'margin_left' => 19, 'margin_right' => 19,
             'default_font' => $family, 'default_font_size' => $size]);
         $pdf->showImageErrors = false;
+        InstitutionalPdfHeader::apply($pdf, 175);
         $pdf->WriteHTML($html);
         return $pdf->Output('', 'S');
     }

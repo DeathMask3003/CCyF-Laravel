@@ -239,9 +239,11 @@ class ConvocationDocuments
         $directory = storage_path('app/mpdf');
         if (! is_dir($directory)) mkdir($directory, 0775, true);
         $pdf = new Mpdf(['mode' => 'utf-8', 'format' => [215.9, 355.6], 'tempDir' => $directory,
-            'margin_top' => 16, 'margin_bottom' => 16, 'margin_left' => 17, 'margin_right' => 17,
+            'margin_top' => 31, 'margin_header' => 6, 'margin_bottom' => 16,
+            'margin_left' => 17, 'margin_right' => 17,
             'default_font' => $fontFamily, 'default_font_size' => $fontSize]);
         $pdf->SetTitle($title);
+        InstitutionalPdfHeader::apply($pdf, 180);
         $pdf->WriteHTML($html);
         return $pdf->Output('', 'S');
     }

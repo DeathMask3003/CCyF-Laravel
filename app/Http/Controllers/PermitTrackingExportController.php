@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\LegacyMenu;
+use App\Services\InstitutionalPdfHeader;
 use App\Services\PermitTrackingRecords;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -95,7 +96,7 @@ class PermitTrackingExportController extends Controller
 
     private function pdf(array $rows, string $service, string $filename): Response
     {
-        $html = '<h1>CCyF · Seguimiento de permisionarios</h1><p>'.$service.' · '.count($rows).' registros · '.now()->format('d/m/Y H:i').'</p><table><thead><tr>';
+        $html = '<h1>Seguimiento de permisionarios</h1><p>'.$service.' · '.count($rows).' registros · '.now()->format('d/m/Y H:i').'</p><table><thead><tr>';
         foreach (self::HEADERS as $header) {
             $html .= '<th>'.e($header).'</th>';
         }
@@ -113,8 +114,9 @@ class PermitTrackingExportController extends Controller
         $html .= '</tbody></table>';
         $temp = storage_path('app/mpdf');
         File::ensureDirectoryExists($temp);
-        $pdf = new Mpdf(['mode'=>'utf-8','format'=>'Legal-L','tempDir'=>$temp,'margin_left'=>7,'margin_right'=>7,'margin_top'=>12,'margin_bottom'=>13,'default_font'=>'dejavusans']);
+        $pdf = new Mpdf(['mode'=>'utf-8','format'=>'Legal-L','tempDir'=>$temp,'margin_left'=>7,'margin_right'=>7,'margin_top'=>31,'margin_bottom'=>13,'margin_header'=>6,'default_font'=>'dejavusans']);
         $pdf->SetTitle('CCyF - Seguimiento de permisionarios');
+        InstitutionalPdfHeader::apply($pdf);
         $pdf->SetHTMLFooter('<div style="font-size:7pt;text-align:right;color:#74646c">CCyF · Página {PAGENO} de {nbpg}</div>');
         $pdf->WriteHTML('<style>body{font-family:dejavusans;font-size:6pt;color:#2b2026}h1{font-size:15pt;color:#611232;margin:0 0 4px}p{font-size:8pt;color:#75666e}table{border-collapse:collapse;width:100%;table-layout:fixed}thead{display:table-header-group}th{background:#611232;color:white;font-size:5.5pt;padding:5px 3px;text-align:left}td{font-size:5.5pt;padding:4px 3px;border-bottom:1px solid #e7dce1;word-wrap:break-word}tr:nth-child(even) td{background:#f9f5f7}</style>');
         $pdf->WriteHTML($html);

@@ -81,10 +81,7 @@ class FinalEvaluationReport
         ]);
         $pdf->SetTitle('Hoja final de evaluación · '.$record->nombre);
         $pdf->SetAuthor('CCyF CoBaEMex');
-        $header = base64_encode(file_get_contents(resource_path('images/cabezera.png')));
-        $headerHtml = '<div style="border-bottom:1px solid #8c2236;padding-bottom:4px"><img src="data:image/png;base64,'.$header.'" style="width:190mm;height:auto"></div>';
-        $pdf->SetHTMLHeader($headerHtml, 'O');
-        $pdf->SetHTMLHeader($headerHtml, 'E');
+        InstitutionalPdfHeader::apply($pdf);
         $pdf->SetHTMLFooter('<div style="border-top:1px solid #bdc3c7;padding-top:5px;color:#666;font-size:7pt;text-align:center">Página {PAGENO}/{nbpg}</div>');
         $pdf->WriteHTML($html);
         if ($signers) {
