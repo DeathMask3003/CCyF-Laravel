@@ -23,7 +23,8 @@ class OfficeReviewController extends Controller
 {
     public function pending(Request $request, LegacyMenu $menu): View
     {
-        abort_unless($menu->allows($request->user(), 'gestionOficio'), 403);
+        abort_unless(! $menu->isContestant($request->user())
+            && $menu->allows($request->user(), 'gestionOficio'), 403);
 
         $query = $this->localRecords()->where('registro.estado', 'Recibido');
         $this->applyFilters($query, $request);
@@ -55,11 +56,13 @@ class OfficeReviewController extends Controller
                 && $evaluation->source($record->origen, (int) $record->id,
                     $service === 3 ? 'cafeteria' : 'fotocopiado') !== null;
         });
-        $canReview = $menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio');
+        $canReview = ! $menu->isContestant($request->user())
+            && ($menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio'));
 
         return view('revision.finished', [
             'records' => $records, 'total' => $all->count(), 'canReview' => $canReview,
-            'convocations' => $this->convocations(), 'services' => $this->services(),
+            'convocations' => $this->convocations($menu->isContestant($request->user())),
+            'services' => $this->services(), 'activeConvocationsOnly' => $menu->isContestant($request->user()),
         ]);
     }
 
@@ -104,7 +107,7 @@ class OfficeReviewController extends Controller
                 'convocatoria.cat_nom as convocatoria_nombre', 'servicio.trami_nom as servicio_nombre',
             ]);
         abort_unless($registration, 404);
-        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
+        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado', true);
         $service = (int) $registration->trami_id === 3 ? 'cafeteria' : 'fotocopiado';
         $requirements = collect(PrevaluationCatalog::documents($service))
             ->filter(fn ($label, $key) => $documentFiles->effective('historico', $record, $key) !== null);
@@ -130,7 +133,7 @@ class OfficeReviewController extends Controller
             ->whereIn('d.trami_id', [3, 4])
             ->first(['d.usu_id', 'd.trami_id', 'd.doc_exter', 'u.usu_area', 'p.area_nom', 'c.cat_nom']);
         abort_unless($registration, 404);
-        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
+        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado', true);
         $service = (int) $registration->trami_id === 3 ? 'cafeteria' : 'fotocopiado';
         $source = $evaluation->source('historico', $record, $service);
         abort_unless($source, 404, 'Este expediente no tiene una evaluación final registrada.');
@@ -173,7 +176,7 @@ class OfficeReviewController extends Controller
             ->where('doc_estado', 'Finalizado')->whereIn('trami_id', [3, 4])
             ->first(['usu_id', 'doc_designado']);
         abort_unless($registration, 404);
-        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
+        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado', true);
 
         $path = $resultPdf->historical($record, (int) $registration->doc_designado === 1);
         abort_unless($path, 404, 'No se encontró la carta PDF archivada para este expediente.');
@@ -191,7 +194,8 @@ class OfficeReviewController extends Controller
 
     public function finish(int $record, Request $request, LegacyMenu $menu): RedirectResponse
     {
-        abort_unless($menu->allows($request->user(), 'gestionOficio'), 403);
+        abort_unless(! $menu->isContestant($request->user())
+            && $menu->allows($request->user(), 'gestionOficio'), 403);
         $data = $request->validate([
             'decision' => ['required', Rule::in(['designado', 'no_designado', 'no_aceptado'])],
             'respuesta' => ['required', 'string', 'max:250'],
@@ -216,7 +220,8 @@ class OfficeReviewController extends Controller
 
     public function rejectBulk(Request $request, LegacyMenu $menu): RedirectResponse
     {
-        abort_unless($menu->allows($request->user(), 'gestionOficio'), 403);
+        abort_unless(! $menu->isContestant($request->user())
+            && $menu->allows($request->user(), 'gestionOficio'), 403);
         $data = $request->validate([
             'registros' => ['required', 'array', 'min:1', 'max:100'],
             'registros.*' => ['required', 'integer', 'distinct'],
@@ -255,7 +260,7 @@ class OfficeReviewController extends Controller
         $registration = DB::connection('legacy')->table('tm_documento')->where('doc_id', $record)
             ->where('doc_estado', 'Finalizado')->whereIn('trami_id', [3, 4])->first(['usu_id']);
         abort_unless($registration, 404);
-        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
+        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado', true);
         $current = $documentFiles->effective('historico', $record, $key);
         abort_unless($current, 404);
         return $this->sendDocument($current, $current['mime'] === 'application/pdf' ? $key.'-'.$record.'.pdf' : $current['name']);
@@ -305,9 +310,10 @@ class OfficeReviewController extends Controller
         }
     }
 
-    private function convocations()
+    private function convocations(bool $activeOnly = false)
     {
-        return DB::table('ccyf_convocatorias')->orderByDesc('id')->get(['id', 'numero']);
+        return DB::table('ccyf_convocatorias')->when($activeOnly, fn ($query) => $query->where('activo', true))
+            ->orderByDesc('id')->get(['id', 'numero']);
     }
 
     private function services()
@@ -316,11 +322,16 @@ class OfficeReviewController extends Controller
             ->orWhere('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'legacy_trami_id']);
     }
 
-    private function authorizeRecord(Request $request, LegacyMenu $menu, int $owner, string $state): void
+    private function authorizeRecord(Request $request, LegacyMenu $menu, int $owner, string $state,
+        bool $historical = false): void
     {
-        $canReview = $menu->allows($request->user(), 'gestionOficio') ||
-            ($state === 'Finalizado' && $menu->allows($request->user(), 'buscarOficio'));
-        $owns = $owner === (int) $request->user()->getKey() && $menu->allows($request->user(), 'NuevoOficio');
+        $canReview = ! $menu->isContestant($request->user())
+            && ($menu->allows($request->user(), 'gestionOficio')
+                || ($state === 'Finalizado' && $menu->allows($request->user(), 'buscarOficio')));
+        $ownerId = $historical ? ($request->user()->legacy_usu_id ?: $request->user()->getKey())
+            : $request->user()->getKey();
+        $owns = $owner === (int) $ownerId
+            && ($menu->allows($request->user(), 'NuevoOficio') || $menu->allows($request->user(), 'buscarOficio'));
         abort_unless($canReview || $owns, 403);
     }
 

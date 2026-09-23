@@ -802,6 +802,63 @@ class PriceCatalogTest extends TestCase
         $this->get('/convocatorias-finalizadas/exportar/csv')->assertNotFound();
     }
 
+    public function test_concursante_only_sees_own_results_and_active_convocations_even_with_review_permissions(): void
+    {
+        DB::table('ccyf_roles')->insert([
+            'rol_id' => 1, 'legacy_rol_id' => 1, 'rol_nom' => 'Concursante', 'est' => 1,
+        ]);
+        DB::table('ccyf_role_permissions')->insert([
+            ['rol_id' => 1, 'menu_key' => 'buscarOficio', 'allowed' => 1],
+            ['rol_id' => 1, 'menu_key' => 'gestionOficio', 'allowed' => 1],
+        ]);
+        DB::table('ccyf_usuarios')->where('usu_id', 2)->update(['rol_id' => 1]);
+
+        $own = $this->reviewRecord();
+        $other = (array) DB::table('ccyf_registros')->where('id', $own)->first();
+        unset($other['id']);
+        $other['folio'] = 'CCYF-2026-OTRO';
+        $other['usu_id'] = 1;
+        $other['solicitante'] = 'Otra persona';
+        $otherId = DB::table('ccyf_registros')->insertGetId($other);
+        DB::table('ccyf_registros')->whereIn('id', [$own, $otherId])
+            ->update(['estado' => 'Finalizado', 'decision' => 'no_designado']);
+
+        DB::connection('legacy')->table('tm_documento')->insert([
+            ['doc_id' => 700, 'num_doc' => '8', 'trami_id' => 3, 'usu_id' => 2,
+                'doc_estado' => 'Finalizado', 'doc_exter' => 'Plantel Atlacomulco'],
+            ['doc_id' => 701, 'num_doc' => '8', 'trami_id' => 3, 'usu_id' => 1,
+                'doc_estado' => 'Finalizado', 'doc_exter' => 'Plantel Atlacomulco'],
+        ]);
+
+        $this->asUser(2);
+        $page = $this->get('/convocatorias-finalizadas')->assertOk()
+            ->assertSee('CCYF-2026-00001')->assertSee('HIST-00700')
+            ->assertDontSee('CCYF-2026-OTRO')->assertDontSee('HIST-00701');
+        $this->assertStringNotContainsString('href="'.route('revision.pending').'"', $page->getContent());
+        $html = new \DOMDocument;
+        @$html->loadHTML($page->getContent());
+        $options = (new \DOMXPath($html))->query('//select[@name="convocatoria"]/option/@value');
+        $this->assertSame(['', '9', '8'], array_map(fn ($node) => $node->value, iterator_to_array($options)));
+        $this->get('/convocatorias-finalizadas/historico/700')->assertOk();
+        $this->get('/convocatorias-finalizadas/historico/701')->assertForbidden();
+        $this->get("/expedientes/{$otherId}")->assertForbidden();
+        $this->get('/convocatorias-pendientes')->assertForbidden();
+        $this->post("/expedientes/{$otherId}/finalizar", [])->assertForbidden();
+
+        $excel = $this->get('/convocatorias-finalizadas/exportar/xlsx');
+        $excel->assertOk();
+        $path = tempnam(sys_get_temp_dir(), 'ccyf-xlsx-');
+        file_put_contents($path, $excel->streamedContent());
+        try {
+            $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getActiveSheet();
+            $values = implode(' ', array_map('strval', array_merge(...$sheet->toArray())));
+            $this->assertStringNotContainsString('OTRO', $values);
+            $this->assertStringNotContainsString('Otra persona', $values);
+        } finally {
+            unlink($path);
+        }
+    }
+
     private function reviewRecord(): int
     {
         $catalog = app(PriceCatalogs::class)->prepare(8);

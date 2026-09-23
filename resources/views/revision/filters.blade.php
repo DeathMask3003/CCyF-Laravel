@@ -8,7 +8,7 @@
         </select>
     </label>
     <label>Convocatoria
-        <select name="convocatoria"><option value="">Todas las convocatorias</option>
+        <select name="convocatoria"><option value="">{{ $activeConvocationsOnly ?? false ? 'Filtrar por convocatoria activa' : 'Todas las convocatorias' }}</option>
             @foreach ($convocations as $convocation)<option value="{{ $convocation->id }}" @selected((string) request('convocatoria') === (string) $convocation->id)>{{ $convocation->numero }}</option>@endforeach
         </select>
     </label>

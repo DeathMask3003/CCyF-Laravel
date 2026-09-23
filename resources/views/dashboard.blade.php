@@ -29,7 +29,7 @@
     @if ($ccyfMenu->allows(auth()->user(), 'Subcategorias_widi'))
         <article class="feature-card"><span class="feature-icon">07</span><h2>Enlaces para convocatoria</h2><p>Selecciona los planteles y CEMSaD autorizados para participar en cada convocatoria.</p><a class="text-link" href="{{ route('enlaces.index') }}">Administrar enlaces <span aria-hidden="true">→</span></a></article>
     @endif
-    @if ($ccyfMenu->allows(auth()->user(), 'gestionOficio'))
+    @if (! $ccyfMenu->isContestant(auth()->user()) && $ccyfMenu->allows(auth()->user(), 'gestionOficio'))
         <article class="feature-card"><span class="feature-icon">08</span><h2>Convocatorias pendientes</h2><p>Revisa propuestas, documentos y precios; registra la decisión y designación.</p><a class="text-link" href="{{ route('revision.pending') }}">Revisar propuestas <span aria-hidden="true">→</span></a></article>
     @endif
     @if ($ccyfMenu->allows(auth()->user(), 'buscarOficio') || $ccyfMenu->allows(auth()->user(), 'gestionOficio') || $ccyfMenu->allows(auth()->user(), 'NuevoOficio'))

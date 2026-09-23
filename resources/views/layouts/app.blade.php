@@ -23,7 +23,7 @@
                 @php($canCampuses = $ccyfMenu->allows(auth()->user(), 'Areas'))
                 @php($canConvocations = $ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
                 @php($canLinks = $ccyfMenu->allows(auth()->user(), 'Subcategorias_widi'))
-                @php($canPending = $ccyfMenu->allows(auth()->user(), 'gestionOficio'))
+                @php($canPending = ! $ccyfMenu->isContestant(auth()->user()) && $ccyfMenu->allows(auth()->user(), 'gestionOficio'))
                 @php($canFinished = $ccyfMenu->allows(auth()->user(), 'buscarOficio') || $canPending || $ccyfMenu->allows(auth()->user(), 'NuevoOficio'))
                 @php($canTracking = $ccyfMenu->allows(auth()->user(), 'seguimiento_permisionarios'))
                 @php($canPreval = $ccyfMenu->allows(auth()->user(), 'prevaluacion') || $ccyfMenu->allows(auth()->user(), 'Prevaluaciones_admin'))

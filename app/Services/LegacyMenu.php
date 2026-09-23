@@ -27,6 +27,15 @@ class LegacyMenu
         return $role ? (bool) $role->est : true;
     }
 
+    public function isContestant(LegacyUser $user): bool
+    {
+        $role = DB::table('ccyf_roles')->where('rol_id', $user->rol_id)
+            ->first(['legacy_rol_id', 'rol_nom']);
+
+        return (int) ($role?->legacy_rol_id ?? $user->rol_id) === 1
+            || str_contains(mb_strtolower((string) $role?->rol_nom), 'concursante');
+    }
+
     private function check(LegacyUser $user, string $menu): bool
     {
         if (! $user->est || ! $this->roleActive($user)) {

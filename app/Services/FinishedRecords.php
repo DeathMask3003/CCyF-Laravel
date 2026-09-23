@@ -10,8 +10,10 @@ class FinishedRecords
 {
     public function forRequest(Request $request, LegacyMenu $menu): Collection
     {
-        $canReview = $menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio');
-        abort_unless($canReview || $menu->allows($request->user(), 'NuevoOficio'), 403);
+        $canReview = ! $menu->isContestant($request->user())
+            && ($menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio'));
+        abort_unless($canReview || $menu->allows($request->user(), 'NuevoOficio')
+            || $menu->allows($request->user(), 'buscarOficio'), 403);
 
         $local = DB::table('ccyf_registros as registro')
             ->join('ccyf_convocatorias as convocatoria', 'convocatoria.id', '=', 'registro.convocatoria_id')
@@ -34,7 +36,7 @@ class FinishedRecords
             ->leftJoin('tm_tramite as servicio', 'servicio.trami_id', '=', 'documento.trami_id')
             ->where('documento.doc_estado', 'Finalizado')->whereIn('documento.trami_id', [3, 4]);
         if (! $canReview) {
-            $historical->where('documento.usu_id', $request->user()->getKey());
+            $historical->where('documento.usu_id', $request->user()->legacy_usu_id ?: $request->user()->getKey());
         }
         $historicalRows = $historical->get([
             'documento.doc_id as id', 'documento.usu_id', 'documento.doc_exter as plantel_nombre',
