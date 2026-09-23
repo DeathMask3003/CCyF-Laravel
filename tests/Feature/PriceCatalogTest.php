@@ -553,6 +553,8 @@ class PriceCatalogTest extends TestCase
 
         $this->asUser(1);
         $this->get('/convocatorias-pendientes')->assertOk()->assertSee('CCYF-2026-00001');
+        $this->get("/expedientes/{$record}")->assertOk()->assertSee('review-designation.js')
+            ->assertSee('fecha_fin_confirmada');
         $this->post("/expedientes/{$record}/finalizar", [
             'decision' => 'designado', 'respuesta' => 'Se designa al participante.',
         ])->assertSessionHasErrors(['fecha_inicio', 'fecha_fin', 'monto']);
@@ -561,6 +563,13 @@ class PriceCatalogTest extends TestCase
         $this->post("/expedientes/{$record}/finalizar", [
             'decision' => 'designado', 'respuesta' => 'Se designa al participante.',
             'fecha_inicio' => '2026-10-01', 'fecha_fin' => '2027-09-30', 'monto' => '1200.50',
+        ])->assertSessionHasErrors('fecha_fin_confirmada');
+        $this->assertDatabaseHas('ccyf_registros', ['id' => $record, 'estado' => 'Recibido']);
+
+        $this->post("/expedientes/{$record}/finalizar", [
+            'decision' => 'designado', 'respuesta' => 'Se designa al participante.',
+            'fecha_inicio' => '2026-10-01', 'fecha_fin' => '2027-09-30',
+            'fecha_fin_confirmada' => '1', 'monto' => '1200.50',
         ])->assertRedirect('/convocatorias-finalizadas');
         $this->assertDatabaseHas('ccyf_registros', [
             'id' => $record, 'estado' => 'Finalizado', 'decision' => 'designado',

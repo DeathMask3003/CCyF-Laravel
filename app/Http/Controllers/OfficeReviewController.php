@@ -204,7 +204,10 @@ class OfficeReviewController extends Controller
             'respuesta' => ['required', 'string', 'max:250'],
             'fecha_inicio' => ['required_if:decision,designado', 'nullable', 'date'],
             'fecha_fin' => ['required_if:decision,designado', 'nullable', 'date', 'after_or_equal:fecha_inicio'],
+            'fecha_fin_confirmada' => ['accepted_if:decision,designado'],
             'monto' => ['required_if:decision,designado', 'nullable', 'numeric', 'between:0.01,9999999999.99', 'decimal:0,2'],
+        ], [
+            'fecha_fin_confirmada.accepted_if' => 'Confirma la fecha de fin antes de guardar la designación.',
         ]);
         $designado = $data['decision'] === 'designado';
         $changed = DB::table('ccyf_registros')->where('id', $record)->where('estado', 'Recibido')->update([

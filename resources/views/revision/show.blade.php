@@ -1,4 +1,13 @@
 @extends('layouts.app')
+@push('head')
+<style>
+    .review-date-review { grid-column:1/-1; padding:16px 18px; border:1px solid #e5d9dd; border-radius:12px; background:#fcf8f9; }
+    .review-date-review p { margin:0 0 10px; color:#5f4b54; font-size:.87rem; line-height:1.5; }
+    .review-date-review button { margin:0 0 12px; }
+    .review-date-confirm { display:flex; align-items:flex-start; gap:10px; font-weight:650; font-size:.88rem; }
+    .review-date-confirm input { flex:none; width:18px; height:18px; margin:2px 0 0; accent-color:#611232; }
+</style>
+@endpush
 
 @section('title', 'Expediente '.$registration->folio)
 @section('content')
@@ -18,11 +27,20 @@
         @if ($errors->any())<div class="form-errors" role="alert"><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
         <form method="post" action="{{ route('revision.finish', $registration->id) }}">@csrf
             <div class="review-decision-fields"><label>Decisión<select name="decision" id="decision" required><option value="">Selecciona el resultado</option><option value="designado" @selected(old('decision') === 'designado')>Designar al plantel</option><option value="no_designado" @selected(old('decision') === 'no_designado')>No designar</option><option value="no_aceptado" @selected(old('decision') === 'no_aceptado')>No aceptar propuesta</option></select></label><label>Respuesta para el expediente<textarea name="respuesta" rows="3" maxlength="250" required placeholder="Explica el resultado en un máximo de 250 caracteres">{{ old('respuesta') }}</textarea></label></div>
-            <div class="review-designation" id="designation-fields" hidden><label>Fecha de inicio<input type="date" name="fecha_inicio" value="{{ old('fecha_inicio') }}"></label><label>Fecha de fin<input type="date" name="fecha_fin" value="{{ old('fecha_fin') }}"></label><label>Monto inicial ($)<input type="number" name="monto" min="0.01" step="0.01" value="{{ old('monto') }}"></label></div>
+            <div class="review-designation" id="designation-fields" hidden>
+                <label>Fecha de inicio<input id="fecha-inicio" type="date" name="fecha_inicio" value="{{ old('fecha_inicio') }}"></label>
+                <label>Fecha de fin<input id="fecha-fin" type="date" name="fecha_fin" value="{{ old('fecha_fin') }}" aria-describedby="fecha-fin-ayuda"></label>
+                <label>Monto inicial ($)<input type="number" name="monto" min="0.01" step="0.01" value="{{ old('monto') }}"></label>
+                <div class="review-date-review">
+                    <p id="fecha-fin-ayuda" role="status" aria-live="polite">Selecciona la fecha de inicio para calcular un año. Puedes cambiar la fecha final manualmente.</p>
+                    <button class="quiet-button" id="fecha-fin-sugerida" type="button">Usar fecha sugerida</button>
+                    <label class="review-date-confirm"><input id="fecha-fin-confirmada" type="checkbox" name="fecha_fin_confirmada" value="1" @checked(old('fecha_fin_confirmada'))><span>Confirmo que revisé la fecha de fin y es correcta.</span></label>
+                </div>
+            </div>
             <div class="form-footer"><p>Comprueba los PDF y precios antes de finalizar. Este resultado ya no aparecerá en Pendientes.</p><button class="button" type="submit" onclick="return confirm('¿Finalizar esta propuesta con el resultado indicado?')">Guardar resultado</button></div>
         </form>
     </section>
-    <script>const decision = document.getElementById('decision'); const designation = document.getElementById('designation-fields'); const updateDesignation = () => { const enabled = decision.value === 'designado'; designation.hidden = !enabled; designation.querySelectorAll('input').forEach(input => { input.required = enabled; }); }; decision.addEventListener('change', updateDesignation); updateDesignation();</script>
+    @push('scripts')<script src="{{ asset('js/review-designation.js') }}?v=1" defer></script>@endpush
 @endif
 @include('revision.document-viewer')
 @endsection
