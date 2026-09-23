@@ -17,4 +17,5 @@ return [
     ],
     // La copia histórica se encuentra junto al proyecto Laravel en esta instalación.
     'legacy_files_root' => env('CCYF_LEGACY_FILES_ROOT', dirname(base_path()).DIRECTORY_SEPARATOR.'ccyf'.DIRECTORY_SEPARATOR.'assets'.DIRECTORY_SEPARATOR.'documents'),
+    'legacy_reports_root' => env('CCYF_LEGACY_REPORTS_ROOT', dirname(base_path()).DIRECTORY_SEPARATOR.'ccyf'.DIRECTORY_SEPARATOR.'reportes'),
 ];

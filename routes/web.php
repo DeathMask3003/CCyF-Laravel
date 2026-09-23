@@ -91,6 +91,8 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::post('/expedientes/{record}/finalizar', [OfficeReviewController::class, 'finish'])->whereNumber('record')->name('revision.finish');
     Route::get('/expedientes/{record}/archivos/{file}', [OfficeReviewController::class, 'file'])->whereNumber(['record', 'file'])->name('revision.file');
     Route::get('/convocatorias-finalizadas/historico/{record}', [OfficeReviewController::class, 'historical'])->whereNumber('record')->name('revision.historical');
+    Route::get('/convocatorias-finalizadas/historico/{record}/resultado-pdf', [OfficeReviewController::class, 'historicalResultPdf'])
+        ->whereNumber('record')->name('revision.historical-result-pdf');
     Route::get('/convocatorias-finalizadas/historico/{record}/archivo/{key}', [OfficeReviewController::class, 'historicalFile'])->whereNumber('record')->name('revision.historical-file');
 
     Route::get('/seguimiento-permisionarios', [PermitTrackingController::class, 'index'])->name('seguimiento.index');

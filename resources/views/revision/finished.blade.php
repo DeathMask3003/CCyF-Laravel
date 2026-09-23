@@ -22,7 +22,7 @@
     <div class="review-list">
         @foreach ($records as $record)
             <article class="review-row"><div class="review-row-main"><div class="review-row-top"><strong>{{ $record->folio }}</strong><span class="pill {{ $record->origen === 'historico' ? 'pill-neutral' : 'pill-ready' }}">{{ $record->origen === 'historico' ? 'Histórico' : 'Actual' }}</span><span class="pill {{ $record->decision === 'designado' || $record->decision === 'Designado' ? 'pill-ready' : 'pill-neutral' }}">{{ match ($record->decision) { 'designado', 'Designado' => 'Designado', 'no_aceptado' => 'No aceptado', default => 'No designado' } }}</span></div><h2>{{ $record->solicitante ?: 'Participante' }}</h2><p>{{ $record->plantel_nombre ?: 'Plantel sin dato' }} · {{ $record->servicio_nombre ?: 'Servicio CCyF' }}</p><small>{{ $record->convocatoria_nombre ?: 'Convocatoria histórica' }} · Finalizado {{ $record->finalizado_at ? \Illuminate\Support\Carbon::parse($record->finalizado_at)->format('d/m/Y H:i') : 'sin fecha registrada' }}</small></div>
-                <a class="outline-button button-link" href="{{ $record->origen === 'historico' ? route('revision.historical', $record->id) : route('revision.show', $record->id) }}">Ver resultado →</a></article>
+                <div class="review-row-actions"><a class="outline-button button-link" href="{{ $record->origen === 'historico' ? route('revision.historical', $record->id) : route('revision.show', $record->id) }}">Ver resultado →</a>@if ($record->resultado_pdf_disponible)<a class="button button-link" href="{{ route('revision.historical-result-pdf', $record->id) }}" target="_blank" rel="noopener">Carta PDF ↗</a>@endif</div></article>
         @endforeach
     </div>
     @include('revision.pagination')

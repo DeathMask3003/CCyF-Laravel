@@ -60,6 +60,14 @@ class PriceCatalogTest extends TestCase
             $table->date('doc_fech_fin')->nullable();
             $table->decimal('monto', 12, 2)->nullable();
         });
+        Schema::connection('legacy')->create('tm_eval_cafe', function (Blueprint $table): void {
+            $table->increments('id_evalua_cafe');
+            $table->integer('doc_id');
+        });
+        Schema::connection('legacy')->create('tm_evaluaciones', function (Blueprint $table): void {
+            $table->increments('id_evaluacion');
+            $table->integer('doc_id');
+        });
         Schema::connection('legacy')->create('td_documentov3', function (Blueprint $table): void {
             $table->increments('det_id');
             $table->integer('doc_id');
@@ -588,6 +596,41 @@ class PriceCatalogTest extends TestCase
             ->assertHeader('Content-Type', 'application/pdf')
             ->assertHeader('Content-Disposition', 'attachment; filename=prop_escrito-700.pdf');
         $this->get('/convocatorias-finalizadas/historico/700/archivo/acta_nac')->assertNotFound();
+    }
+
+    public function test_final_result_pdf_uses_the_recorded_designation_and_requires_access(): void
+    {
+        Storage::fake('local');
+        $reports = Storage::disk('local')->path('reports');
+        mkdir($reports.DIRECTORY_SEPARATOR.'permisionario_designado', 0777, true);
+        mkdir($reports.DIRECTORY_SEPARATOR.'permisionario_no_designado', 0777, true);
+        file_put_contents($reports.DIRECTORY_SEPARATOR.'permisionario_designado'.DIRECTORY_SEPARATOR.'Carta_Designacion_700.pdf', '%PDF-1.4 designated');
+        file_put_contents($reports.DIRECTORY_SEPARATOR.'permisionario_no_designado'.DIRECTORY_SEPARATOR.'Carta_No_Designado_701.pdf', '%PDF-1.4 not designated');
+        config()->set('ccyf.legacy_reports_root', $reports);
+
+        DB::connection('legacy')->table('tm_documento')->insert([
+            ['doc_id' => 700, 'num_doc' => '8', 'trami_id' => 3, 'usu_id' => 2,
+                'doc_estado' => 'Finalizado', 'doc_designado' => 1],
+            ['doc_id' => 701, 'num_doc' => '9', 'trami_id' => 4, 'usu_id' => 2,
+                'doc_estado' => 'Finalizado', 'doc_designado' => 0],
+        ]);
+
+        $this->get('/convocatorias-finalizadas/historico/700/resultado-pdf')->assertRedirect('/acceso');
+        $this->asUser(1);
+        $this->get('/convocatorias-finalizadas')->assertOk()
+            ->assertSee('/convocatorias-finalizadas/historico/700/resultado-pdf', false)
+            ->assertSee('/convocatorias-finalizadas/historico/701/resultado-pdf', false);
+        $this->get('/convocatorias-finalizadas/historico/700')->assertOk()
+            ->assertSee('Carta de designación')->assertSee('PDF no disponible');
+        $this->get('/convocatorias-finalizadas/historico/700/resultado-pdf')->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'inline; filename="Carta_Designacion_700.pdf"');
+        $this->get('/convocatorias-finalizadas/historico/701/resultado-pdf')->assertOk()
+            ->assertHeader('Content-Disposition', 'inline; filename="Carta_No_Designado_701.pdf"');
+
+        DB::connection('legacy')->table('tm_documento')->where('doc_id', 700)->update(['doc_designado' => 0]);
+        $this->get('/convocatorias-finalizadas/historico/700/resultado-pdf')->assertNotFound();
+        $this->get('/convocatorias-finalizadas/historico/999/resultado-pdf')->assertNotFound();
     }
 
     public function test_finalized_exports_match_original_columns_filters_and_permissions(): void

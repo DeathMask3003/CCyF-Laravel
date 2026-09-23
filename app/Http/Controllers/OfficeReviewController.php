@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\FinishedRecords;
+use App\Services\FinishedResultPdf;
 use App\Services\DocumentFiles;
 use App\Services\LegacyMenu;
 use App\Services\PrevaluationCatalog;
@@ -35,13 +36,17 @@ class OfficeReviewController extends Controller
         ]);
     }
 
-    public function finished(Request $request, LegacyMenu $menu, FinishedRecords $finishedRecords): View
+    public function finished(Request $request, LegacyMenu $menu, FinishedRecords $finishedRecords, FinishedResultPdf $resultPdf): View
     {
         $all = $finishedRecords->forRequest($request, $menu);
         $page = max(1, LengthAwarePaginator::resolveCurrentPage());
         $records = new LengthAwarePaginator($all->forPage($page, 15)->values(), $all->count(), 15, $page, [
             'path' => $request->url(), 'query' => $request->query(),
         ]);
+        $records->getCollection()->each(function ($record) use ($resultPdf): void {
+            $record->resultado_pdf_disponible = $record->origen === 'historico'
+                && $resultPdf->historical((int) $record->id, (int) $record->designado === 1) !== null;
+        });
         $canReview = $menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio');
 
         return view('revision.finished', [
@@ -72,7 +77,7 @@ class OfficeReviewController extends Controller
         return view('revision.show', compact('registration', 'prices', 'files'));
     }
 
-    public function historical(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles): View
+    public function historical(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles, FinishedResultPdf $resultPdf): View
     {
         $registration = DB::connection('legacy')->table('tm_documento as documento')
             ->leftJoin('tm_usuario as usuario', 'usuario.usu_id', '=', 'documento.usu_id')
@@ -89,8 +94,34 @@ class OfficeReviewController extends Controller
         $service = (int) $registration->trami_id === 3 ? 'cafeteria' : 'fotocopiado';
         $requirements = collect(PrevaluationCatalog::documents($service))
             ->filter(fn ($label, $key) => $documentFiles->effective('historico', $record, $key) !== null);
+        $resultadoPdfDisponible = $resultPdf->historical($record, (int) $registration->doc_designado === 1) !== null;
+        $evaluacionRegistrada = DB::connection('legacy')
+            ->table($service === 'cafeteria' ? 'tm_eval_cafe' : 'tm_evaluaciones')
+            ->where('doc_id', $record)->exists();
 
-        return view('revision.historical', compact('registration', 'requirements'));
+        return view('revision.historical', compact('registration', 'requirements', 'resultadoPdfDisponible', 'evaluacionRegistrada'));
+    }
+
+    public function historicalResultPdf(int $record, Request $request, LegacyMenu $menu, FinishedResultPdf $resultPdf): BinaryFileResponse
+    {
+        $registration = DB::connection('legacy')->table('tm_documento')->where('doc_id', $record)
+            ->where('doc_estado', 'Finalizado')->whereIn('trami_id', [3, 4])
+            ->first(['usu_id', 'doc_designado']);
+        abort_unless($registration, 404);
+        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
+
+        $path = $resultPdf->historical($record, (int) $registration->doc_designado === 1);
+        abort_unless($path, 404, 'No se encontró la carta PDF archivada para este expediente.');
+
+        $response = response()->file($path, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.basename($path).'"',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+        $response->setPrivate();
+        $response->headers->addCacheControlDirective('no-store');
+
+        return $response;
     }
 
     public function finish(int $record, Request $request, LegacyMenu $menu): RedirectResponse
