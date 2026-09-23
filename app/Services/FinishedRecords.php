@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class FinishedRecords
 {
-    public function forRequest(Request $request, LegacyMenu $menu): Collection
+    public function forRequest(Request $request, LegacyMenu $menu, bool $includeOwnPending = false): Collection
     {
         $canReview = ! $menu->isContestant($request->user())
             && ($menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio'));
@@ -19,7 +19,8 @@ class FinishedRecords
             ->join('ccyf_convocatorias as convocatoria', 'convocatoria.id', '=', 'registro.convocatoria_id')
             ->join('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'registro.servicio_id')
             ->join('ccyf_planteles as plantel', 'plantel.id', '=', 'registro.plantel_id')
-            ->where('registro.estado', 'Finalizado');
+            ->whereIn('registro.estado', $includeOwnPending && $menu->isContestant($request->user())
+                ? ['Recibido', 'Finalizado'] : ['Finalizado']);
         if (! $canReview) {
             $local->where('registro.usu_id', $request->user()->getKey());
         }
@@ -62,8 +63,9 @@ class FinishedRecords
             $row->correo = $contact?->usu_correo;
             $row->telefono = $contact?->usu_telf;
             $row->origen = 'actual';
-            $row->fecha_orden = $row->finalizado_at;
-            $row->estado_texto = $this->stateText($row->decision, $row->respuesta);
+            $row->fecha_orden = $row->finalizado_at ?: $row->enviado_at;
+            $row->estado_texto = $row->estado === 'Recibido'
+                ? 'Recibido · en revisión' : $this->stateText($row->decision, $row->respuesta);
             $row->folio_original = $row->folio;
             $row->documento_url = route('revision.show', $row->id);
         });

@@ -43,7 +43,8 @@ class OfficeReviewController extends Controller
     public function finished(Request $request, LegacyMenu $menu, FinishedRecords $finishedRecords,
         FinishedResultPdf $resultPdf, FinalEvaluationReport $evaluation): View
     {
-        $all = $finishedRecords->forRequest($request, $menu);
+        $isContestant = $menu->isContestant($request->user());
+        $all = $finishedRecords->forRequest($request, $menu, $isContestant);
         $page = max(1, LengthAwarePaginator::resolveCurrentPage());
         $records = new LengthAwarePaginator($all->forPage($page, 15)->values(), $all->count(), 15, $page, [
             'path' => $request->url(), 'query' => $request->query(),
@@ -52,17 +53,19 @@ class OfficeReviewController extends Controller
             $record->resultado_pdf_disponible = $record->origen === 'historico'
                 && $resultPdf->historical((int) $record->id, (int) $record->designado === 1) !== null;
             $service = (int) $record->legacy_servicio_id;
-            $record->evaluacion_pdf_disponible = in_array($service, [3, 4], true)
+            $record->evaluacion_pdf_disponible = $record->estado === 'Finalizado'
+                && in_array($service, [3, 4], true)
                 && $evaluation->source($record->origen, (int) $record->id,
                     $service === 3 ? 'cafeteria' : 'fotocopiado') !== null;
         });
-        $canReview = ! $menu->isContestant($request->user())
+        $canReview = ! $isContestant
             && ($menu->allows($request->user(), 'buscarOficio') || $menu->allows($request->user(), 'gestionOficio'));
 
         return view('revision.finished', [
             'records' => $records, 'total' => $all->count(), 'canReview' => $canReview,
-            'convocations' => $this->convocations($menu->isContestant($request->user())),
-            'services' => $this->services(), 'activeConvocationsOnly' => $menu->isContestant($request->user()),
+            'convocations' => $this->convocations($isContestant),
+            'services' => $this->services(), 'activeConvocationsOnly' => $isContestant,
+            'isContestant' => $isContestant,
         ]);
     }
 

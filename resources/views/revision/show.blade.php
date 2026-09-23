@@ -2,7 +2,8 @@
 
 @section('title', 'Expediente '.$registration->folio)
 @section('content')
-<a class="back-link" href="{{ $registration->estado === 'Finalizado' ? route('revision.finished') : route('revision.pending') }}">← {{ $registration->estado === 'Finalizado' ? 'Convocatorias finalizadas' : 'Convocatorias pendientes' }}</a>
+@php($isContestant = app(\App\Services\LegacyMenu::class)->isContestant(auth()->user()))
+<a class="back-link" href="{{ $isContestant || $registration->estado === 'Finalizado' ? route('revision.finished') : route('revision.pending') }}">← {{ $isContestant ? 'Mis registros' : ($registration->estado === 'Finalizado' ? 'Convocatorias finalizadas' : 'Convocatorias pendientes') }}</a>
 <div class="page-heading review-heading"><div><span class="eyebrow">Expediente actual · {{ $registration->folio }}</span><h1>{{ $registration->solicitante }}</h1><p>{{ $registration->convocatoria_nombre }} · {{ $registration->servicio_nombre }} · {{ $registration->plantel_nombre }}</p></div><span class="pill {{ $registration->estado === 'Finalizado' ? 'pill-ready' : 'pill-pending' }}">{{ $registration->estado }}</span></div>
 <div class="review-detail-grid">
     <section class="panel"><span class="eyebrow">01 · Datos del registro</span><h2>Propuesta recibida</h2><dl class="review-facts"><div><dt>Folio</dt><dd>{{ $registration->folio }}</dd></div><div><dt>Plantel</dt><dd>{{ $registration->plantel_nombre }}</dd></div><div><dt>Servicio</dt><dd>{{ $registration->servicio_nombre }}</dd></div><div><dt>Enviado</dt><dd>{{ \Illuminate\Support\Carbon::parse($registration->enviado_at)->format('d/m/Y H:i') }}</dd></div><div><dt>Dirigido a</dt><dd>{{ $registration->dirigido_a }}</dd></div><div><dt>Comentarios</dt><dd>{{ $registration->comentarios }}</dd></div></dl></section>
@@ -12,7 +13,7 @@
 @if ($registration->estado === 'Finalizado')
     <section class="panel review-result"><span class="eyebrow">04 · Resultado</span><h2>{{ match ($registration->decision) { 'designado' => 'Designado', 'no_aceptado' => 'No aceptado', default => 'No designado' } }}</h2><p>{{ $registration->respuesta }}</p>@if ($registration->decision === 'designado')<div class="review-result-facts"><span>Del {{ $registration->fecha_inicio }} al {{ $registration->fecha_fin }}</span><strong>Monto inicial: ${{ number_format((float) $registration->monto, 2) }}</strong></div>@endif</section>
     <section class="panel"><span class="eyebrow">05 · Evaluación</span><h2>Hoja final de evaluación</h2><p>{{ $finalEvaluationAvailable ? 'Consulta el PDF generado desde la prevaluación registrada.' : 'Este expediente no tiene un resultado de prevaluación finalizado.' }}</p>@if ($finalEvaluationAvailable)<a class="button button-link" href="{{ route('revision.final-evaluation-pdf', $registration->id) }}" target="_blank" rel="noopener">Consultar evaluación PDF ↗</a>@endif</section>
-@elseif (app(\App\Services\LegacyMenu::class)->allows(auth()->user(), 'gestionOficio'))
+@elseif (! $isContestant && app(\App\Services\LegacyMenu::class)->allows(auth()->user(), 'gestionOficio'))
     <section class="panel review-decision"><span class="eyebrow">04 · Resolución</span><h2>Finalizar propuesta</h2><p class="muted">La decisión y la respuesta quedarán guardadas en el expediente.</p>
         @if ($errors->any())<div class="form-errors" role="alert"><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
         <form method="post" action="{{ route('revision.finish', $registration->id) }}">@csrf

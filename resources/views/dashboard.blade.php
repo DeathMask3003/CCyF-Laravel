@@ -33,7 +33,7 @@
         <article class="feature-card"><span class="feature-icon">08</span><h2>Convocatorias pendientes</h2><p>Revisa propuestas, documentos y precios; registra la decisión y designación.</p><a class="text-link" href="{{ route('revision.pending') }}">Revisar propuestas <span aria-hidden="true">→</span></a></article>
     @endif
     @if ($ccyfMenu->allows(auth()->user(), 'buscarOficio') || $ccyfMenu->allows(auth()->user(), 'gestionOficio') || $ccyfMenu->allows(auth()->user(), 'NuevoOficio'))
-        <article class="feature-card"><span class="feature-icon">09</span><h2>Convocatorias finalizadas</h2><p>Consulta resultados y expedientes actuales e históricos de CCyF.</p><a class="text-link" href="{{ route('revision.finished') }}">Ver resultados <span aria-hidden="true">→</span></a></article>
+        <article class="feature-card"><span class="feature-icon">09</span><h2>{{ $ccyfMenu->isContestant(auth()->user()) ? 'Mis registros' : 'Convocatorias finalizadas' }}</h2><p>{{ $ccyfMenu->isContestant(auth()->user()) ? 'Sigue tus propuestas enviadas y consulta sus resultados.' : 'Consulta resultados y expedientes actuales e históricos de CCyF.' }}</p><a class="text-link" href="{{ route('revision.finished') }}">{{ $ccyfMenu->isContestant(auth()->user()) ? 'Ver mis registros' : 'Ver resultados' }} <span aria-hidden="true">→</span></a></article>
     @endif
     @if ($ccyfMenu->allows(auth()->user(), 'Usuarios'))
         <article class="feature-card"><span class="feature-icon">10</span><h2>Gestión de usuarios</h2><p>Administra cuentas, roles asignados y acceso al sistema.</p><a class="text-link" href="{{ route('usuarios.index') }}">Administrar usuarios <span aria-hidden="true">→</span></a></article>

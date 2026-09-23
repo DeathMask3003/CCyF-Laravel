@@ -29,7 +29,9 @@ class DocumentUpdateController extends Controller
         $isAdmin = $menu->allows($request->user(), 'actualiza_docs');
         $ids = $this->userIds($request);
         $all = $records->all()->filter(fn ($item) => $isAdmin || in_array($item->owner_id, $ids, true));
-        $service = $request->query('servicio', 'cafeteria');
+        $service = $request->query('servicio')
+            ?: (! $isAdmin && $all->where('service', 'cafeteria')->isEmpty()
+                && $all->where('service', 'fotocopiado')->isNotEmpty() ? 'fotocopiado' : 'cafeteria');
         $filtered = $all->where('service', $service);
         if ($request->filled('buscar')) {
             $term = mb_strtolower(trim((string) $request->query('buscar')));

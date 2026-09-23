@@ -75,6 +75,14 @@ class DocumentUpdateTest extends TestCase
             ->assertSee('Usuario 8')->assertDontSee('Usuario 7');
     }
 
+    public function test_photo_only_participant_opens_the_service_with_their_records(): void
+    {
+        $this->be(LegacyUser::findOrFail(8));
+        $this->get('/actualizacion-documentacion')->assertOk()
+            ->assertSee('Fotocopiado')->assertSee('Usuario 8')
+            ->assertDontSee('Usuario 7');
+    }
+
     public function test_upload_keeps_original_and_serves_latest_with_history(): void
     {
         $this->be(LegacyUser::findOrFail(7));

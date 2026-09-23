@@ -39,7 +39,7 @@
                     @endif
                     @if ($canPending)<a href="{{ route('revision.pending') }}" aria-label="Convocatorias pendientes" @class(['active' => request()->routeIs('revision.pending')])>Pendientes</a>@endif
                     @if ($canIssue)<a href="{{ route('emision.index') }}" @class(['active' => request()->routeIs('emision.*')])>Convocatorias</a>@endif
-                    @if ($canFinished)<a href="{{ route('revision.finished') }}" aria-label="Convocatorias finalizadas" @class(['active' => request()->routeIs('revision.finished', 'revision.historical')])>Finalizadas</a>@endif
+                    @if ($canFinished)<a href="{{ route('revision.finished') }}" aria-label="{{ $ccyfMenu->isContestant(auth()->user()) ? 'Mis registros' : 'Convocatorias finalizadas' }}" @class(['active' => request()->routeIs('revision.finished', 'revision.historical')])>{{ $ccyfMenu->isContestant(auth()->user()) ? 'Mis registros' : 'Finalizadas' }}</a>@endif
                     @if ($canTracking)<a href="{{ route('seguimiento.index') }}" @class(['active' => request()->routeIs('seguimiento.*')])>Seguimiento</a>@endif
                     @if ($canPreval)<a href="{{ route('prevaluaciones.index') }}" @class(['active' => request()->routeIs('prevaluaciones.*')])>Prevaluaciones</a>@endif
                     @if ($canDocumentAdmin)<a href="{{ route('documentacion.index') }}" @class(['active' => request()->routeIs('documentacion.*')])>Documentación</a>@endif

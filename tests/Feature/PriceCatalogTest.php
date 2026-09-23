@@ -820,6 +820,15 @@ class PriceCatalogTest extends TestCase
         $other['usu_id'] = 1;
         $other['solicitante'] = 'Otra persona';
         $otherId = DB::table('ccyf_registros')->insertGetId($other);
+        $pending = (array) DB::table('ccyf_registros')->where('id', $own)->first();
+        unset($pending['id']);
+        $pending['folio'] = 'CCYF-2026-PENDIENTE';
+        $pending['convocatoria_id'] = 9;
+        $pending['catalogo_id'] = app(PriceCatalogs::class)->prepare(9);
+        $pending['servicio_id'] = 2;
+        $pending['plantel_id'] = 24;
+        $pending['enviado_at'] = '2026-09-23 12:00:00';
+        $pendingId = DB::table('ccyf_registros')->insertGetId($pending);
         DB::table('ccyf_registros')->whereIn('id', [$own, $otherId])
             ->update(['estado' => 'Finalizado', 'decision' => 'no_designado']);
 
@@ -832,7 +841,9 @@ class PriceCatalogTest extends TestCase
 
         $this->asUser(2);
         $page = $this->get('/convocatorias-finalizadas')->assertOk()
-            ->assertSee('CCYF-2026-00001')->assertSee('HIST-00700')
+            ->assertSee('Mis registros')->assertSee('CCYF-2026-00001')
+            ->assertSee('CCYF-2026-PENDIENTE')->assertSee('Recibido · en revisión')
+            ->assertSee('HIST-00700')
             ->assertDontSee('CCYF-2026-OTRO')->assertDontSee('HIST-00701');
         $this->assertStringNotContainsString('href="'.route('revision.pending').'"', $page->getContent());
         $html = new \DOMDocument;
@@ -841,6 +852,8 @@ class PriceCatalogTest extends TestCase
         $this->assertSame(['', '9', '8'], array_map(fn ($node) => $node->value, iterator_to_array($options)));
         $this->get('/convocatorias-finalizadas/historico/700')->assertOk();
         $this->get('/convocatorias-finalizadas/historico/701')->assertForbidden();
+        $this->get("/expedientes/{$pendingId}")->assertOk()->assertSee('Mis registros')
+            ->assertDontSee('Finalizar propuesta');
         $this->get("/expedientes/{$otherId}")->assertForbidden();
         $this->get('/convocatorias-pendientes')->assertForbidden();
         $this->post("/expedientes/{$otherId}/finalizar", [])->assertForbidden();
@@ -854,6 +867,7 @@ class PriceCatalogTest extends TestCase
             $values = implode(' ', array_map('strval', array_merge(...$sheet->toArray())));
             $this->assertStringNotContainsString('OTRO', $values);
             $this->assertStringNotContainsString('Otra persona', $values);
+            $this->assertStringNotContainsString('PENDIENTE', $values);
         } finally {
             unlink($path);
         }
