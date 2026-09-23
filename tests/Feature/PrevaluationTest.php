@@ -123,6 +123,28 @@ class PrevaluationTest extends TestCase
         $this->get('/prevaluaciones/historico-80/documentos/prop_escrito')->assertForbidden();
     }
 
+    public function test_prevaluation_report_pdf_is_inline_and_uses_saved_price_review(): void
+    {
+        $this->be(LegacyUser::findOrFail(20));
+        $this->post('/prevaluaciones/historico-80/tomar')->assertRedirect();
+        $this->put('/prevaluaciones/historico-80', ['resultado'=>'2','items'=>[
+            'prop_escrito'=>['cumple'=>'1','comentario'=>'Documento correcto'],
+            'tlacoyo'=>['cumple'=>'0','comentario'=>'Precio fuera de rango'],
+        ]])->assertRedirect();
+        $this->get('/prevaluaciones?registro=historico-80')->assertOk()
+            ->assertSee('Vista previa de prevaluación y precios')
+            ->assertSee('/prevaluaciones/historico-80/reporte.pdf');
+        $pdf = $this->get('/prevaluaciones/historico-80/reporte.pdf')->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        $this->assertStringContainsString('inline;', $pdf->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('no-store', $pdf->headers->get('Cache-Control'));
+        $this->get('/prevaluaciones/historico-81/reporte.pdf')->assertOk();
+        $this->get('/prevaluaciones/historico-999/reporte.pdf')->assertNotFound();
+        $this->be(LegacyUser::findOrFail(1));
+        $this->get('/prevaluaciones/historico-80/reporte.pdf')->assertForbidden();
+    }
+
     public function test_permission_import_keeps_local_choices(): void
     {
         DB::connection('legacy')->table('tm_mennu')->insert([
@@ -158,6 +180,16 @@ class PrevaluationTest extends TestCase
         DB::table('ccyf_registro_precios')->insert([
             'registro_id'=>$registration, 'producto_id'=>$product, 'producto_nombre'=>'Ensalada', 'unidad'=>'porción', 'precio'=>35,
         ]);
+        $lastProduct = null;
+        for ($number = 1; $number <= 15; $number++) {
+            $lastProduct = DB::table('ccyf_productos')->insertGetId([
+                'catalogo_id'=>$catalog, 'nombre'=>'Producto '.$number, 'unidad'=>'pieza',
+            ]);
+            DB::table('ccyf_registro_precios')->insert([
+                'registro_id'=>$registration, 'producto_id'=>$lastProduct,
+                'producto_nombre'=>'Producto '.$number, 'unidad'=>'pieza', 'precio'=>$number + 10,
+            ]);
+        }
         Storage::disk('local')->put('registros/nuevo/solicitud.pdf', '%PDF-1.4 solicitud');
         DB::table('ccyf_registro_archivos')->insert([
             'registro_id'=>$registration, 'requisito_id'=>$requirement, 'nombre_original'=>'solicitud.pdf',
@@ -167,6 +199,7 @@ class PrevaluationTest extends TestCase
         $this->be(LegacyUser::findOrFail(20));
         $this->get('/prevaluaciones?registro=actual-'.$registration)->assertOk()
             ->assertSee('Participante nuevo')->assertSee('Solicitud firmada')->assertSee('Ensalada')
+            ->assertSee('Producto 15')
             ->assertSee('/prevaluaciones/actual-'.$registration.'/documentos/req-'.$requirement);
         $this->get('/prevaluaciones/actual-'.$registration.'/documentos/req-'.$requirement)->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
@@ -174,9 +207,19 @@ class PrevaluationTest extends TestCase
         $this->put('/prevaluaciones/actual-'.$registration, ['resultado'=>'2','items'=>[
             'req-'.$requirement=>['cumple'=>'1','comentario'=>'Correcto'],
             'precio-'.$product=>['cumple'=>'1','comentario'=>'Precio revisado'],
+            'precio-'.$lastProduct=>['cumple'=>'0','comentario'=>'Revisar producto adicional'],
         ]])->assertRedirect()->assertSessionHasNoErrors();
         $this->assertDatabaseHas('ccyf_prevaluaciones', ['origen'=>'actual','registro_id'=>$registration,'resultado'=>2]);
         $this->assertDatabaseHas('ccyf_prevaluacion_items', ['clave'=>'precio-'.$product,'comentario'=>'Precio revisado']);
+        $records = app(\App\Services\PrevaluationRecords::class);
+        $record = $records->find('actual-'.$registration);
+        $detail = $records->detail($record);
+        $this->assertCount(16, $detail['prices']);
+        $html = view('prevaluaciones.report', compact('record', 'detail') + ['evaluator'=>'Prevaluador'])->render();
+        $this->assertStringContainsString('Producto 15', $html);
+        $this->assertStringContainsString('Revisar producto adicional', $html);
+        $this->get('/prevaluaciones/actual-'.$registration.'/reporte.pdf')->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
     }
 
     public function test_historical_assignee_and_comments_are_preserved(): void

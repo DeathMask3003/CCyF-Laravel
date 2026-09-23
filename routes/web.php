@@ -106,6 +106,7 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::put('/prevaluaciones/{key}', [PrevaluationController::class, 'save'])->name('prevaluaciones.save');
     Route::put('/prevaluaciones/{key}/observaciones', [PrevaluationController::class, 'note'])->name('prevaluaciones.note');
     Route::get('/prevaluaciones/{key}/documentos/{field}', [PrevaluationController::class, 'file'])->name('prevaluaciones.file');
+    Route::get('/prevaluaciones/{key}/reporte.pdf', [PrevaluationController::class, 'report'])->name('prevaluaciones.report');
 
     Route::get('/catalogos', [PriceCatalogController::class, 'index'])->name('catalogos.index');
     Route::get('/catalogos/{category}', [PriceCatalogController::class, 'show'])->whereNumber('category')->name('catalogos.show');

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260922-4">@endpush
+@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260922-5">@endpush
 
 @section('title', 'Prevaluaciones')
 
@@ -55,7 +55,9 @@
         <header class="preval-modal-head"><div><span class="preval-modal-kicker">{{ $selected->servicio === 'cafeteria' ? '☕ Cafetería' : '▤ Fotocopiado' }} · {{ $selected->convocatoria }}</span><h2 id="preval-dialog-title">{{ $selected->nombre ?: 'Permisionario' }}</h2><p>{{ $selected->plantel }} · Expediente {{ $selected->registro_id }}</p></div><button type="button" class="preval-dialog-close" aria-label="Cerrar expediente" data-close-preval>×</button></header>
         <div class="preval-modal-body">
             <aside class="preval-docs" aria-label="Documentos enviados"><div class="preval-section-head"><span class="eyebrow">01 · Documentación</span><h3>Documentos enviados</h3><small>{{ $detail['documents']->where('available', true)->count() }} de {{ $detail['documents']->count() }} disponibles</small></div>
-                <div class="preval-doc-list">@foreach($detail['documents'] as $document)
+                <div class="preval-doc-list">
+                    <a class="preval-doc-link preval-report-link" href="{{ route('prevaluaciones.report', $selected->key) }}" target="_blank" rel="noopener" data-preval-pdf data-pdf-name="Prevaluación y precios"><span class="preval-pdf-icon">PDF</span><span>Vista previa de prevaluación y precios<small>Reporte con todos los productos de la propuesta</small></span><span aria-hidden="true">↗</span></a>
+                    @foreach($detail['documents'] as $document)
                     @if($document->available)<a class="preval-doc-link" href="{{ route('prevaluaciones.file', ['key'=>$selected->key,'field'=>$document->clave]) }}" target="_blank" rel="noopener" @if($document->mime === 'application/pdf') data-preval-pdf data-pdf-name="{{ $document->nombre }}" @endif><span class="preval-pdf-icon">{{ $document->mime === 'application/pdf' ? 'PDF' : 'DOC' }}</span><span>{{ $document->nombre }}</span><span aria-hidden="true">↗</span></a>
                     @else<span class="preval-doc-missing"><span class="preval-pdf-icon">—</span><span>{{ $document->nombre }}</span><small>Sin archivo</small></span>@endif
                 @endforeach</div>

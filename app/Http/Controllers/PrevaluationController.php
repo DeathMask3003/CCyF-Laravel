@@ -9,10 +9,13 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Mpdf\Mpdf;
+use Mpdf\Output\Destination;
 
 class PrevaluationController extends Controller
 {
@@ -188,6 +191,42 @@ class PrevaluationController extends Controller
         $response = $inline ? response()->file($file['path'], ['Content-Type' => $file['mime']])
             : response()->download($file['path'], $file['name'], ['Content-Type' => $file['mime']]);
         $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->setPrivate();
+        $response->headers->addCacheControlDirective('no-store');
+        return $response;
+    }
+
+    public function report(string $key, Request $request, LegacyMenu $menu, PrevaluationRecords $records)
+    {
+        $this->authorizeView($request, $menu);
+        $record = $this->record($records, $key);
+        $detail = $records->detail($record);
+        $owner = $detail['owner'];
+        $evaluator = $owner ? DB::table('ccyf_usuarios')
+            ->where('usu_id', $owner)->orWhere('legacy_usu_id', $owner)->value('usu_area') : null;
+        if (! $evaluator && $owner && $record->origen === 'historico') {
+            $evaluator = DB::connection('legacy')->table('tm_usuario')->where('usu_id', $owner)->value('usu_area');
+        }
+
+        $html = view('prevaluaciones.report', compact('record', 'detail', 'evaluator'))->render();
+        $temp = storage_path('app/mpdf');
+        File::ensureDirectoryExists($temp);
+        $pdf = new Mpdf([
+            'mode' => 'utf-8', 'format' => 'A4', 'tempDir' => $temp,
+            'margin_left' => 12, 'margin_right' => 12, 'margin_top' => 14, 'margin_bottom' => 18,
+            'default_font' => 'dejavusans',
+        ]);
+        $pdf->SetTitle('Prevaluación de precios · '.$record->nombre);
+        $pdf->SetAuthor('CCyF CoBaEMex');
+        $pdf->SetHTMLFooter('<div style="border-top:1px solid #d8c9ce;padding-top:5px;color:#70656a;font-size:7pt;text-align:right">CCyF · Página {PAGENO} de {nbpg}</div>');
+        $pdf->WriteHTML($html);
+        $bytes = $pdf->Output('', Destination::STRING_RETURN);
+
+        $response = response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Prevaluacion_'.$record->servicio.'_'.$record->registro_id.'.pdf"',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
         $response->setPrivate();
         $response->headers->addCacheControlDirective('no-store');
         return $response;
