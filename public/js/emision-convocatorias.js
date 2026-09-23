@@ -7,12 +7,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (source && editor) {
         const cleanDraft = html => {
             const draft = new DOMParser().parseFromString(html, 'text/html');
-            const allowed = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'OL', 'UL',
+            const allowed = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'H2', 'H3', 'OL', 'UL',
                 'LI', 'BLOCKQUOTE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'A']);
+            const alignable = new Set(['P', 'DIV', 'H2', 'H3', 'LI', 'BLOCKQUOTE', 'TD', 'TH']);
             draft.body.querySelectorAll('script,style,iframe,object,embed,form,input,img,svg').forEach(node => node.remove());
             [...draft.body.querySelectorAll('*')].reverse().forEach(node => {
                 const href = node.tagName === 'A' ? node.getAttribute('href') : null;
+                const candidate = node.style.textAlign || node.getAttribute('align') || '';
+                const alignment = alignable.has(node.tagName) && ['left', 'center', 'right', 'justify'].includes(candidate.toLowerCase())
+                    ? candidate.toLowerCase() : null;
                 [...node.attributes].forEach(attribute => node.removeAttribute(attribute.name));
+                if (alignment) node.style.textAlign = alignment;
                 if (href && /^https?:\/\//i.test(href)) node.setAttribute('href', href);
                 if (!allowed.has(node.tagName)) node.replaceWith(...node.childNodes);
             });
@@ -20,16 +25,37 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         editor.innerHTML = cleanDraft(source.value);
         form.classList.add('editor-ready');
+        const font = document.getElementById('emision-font-family');
+        const size = document.getElementById('emision-font-size');
+        const previewType = () => {
+            editor.style.fontFamily = font.value === 'dejavuserif' ? 'Georgia, serif' : 'Arial, sans-serif';
+            editor.style.fontSize = `${size.value || 9}pt`;
+        };
+        font.addEventListener('change', previewType);
+        size.addEventListener('input', previewType);
+        previewType();
         editor.addEventListener('paste', event => {
             event.preventDefault();
             document.execCommand('insertText', false, event.clipboardData.getData('text/plain'));
         });
-        document.querySelectorAll('.emision-editor-toolbar [data-command]').forEach(button => {
+        const buttons = [...document.querySelectorAll('.emision-editor-toolbar [data-command]')];
+        const alignmentButtons = buttons.filter(button => button.dataset.command.startsWith('justify'));
+        const updateAlignment = () => alignmentButtons.forEach(button => {
+            const active = document.queryCommandState(button.dataset.command);
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        buttons.forEach(button => {
+            button.addEventListener('mousedown', event => event.preventDefault());
             button.addEventListener('click', () => {
                 editor.focus();
                 document.execCommand(button.dataset.command, false, button.dataset.value || null);
                 source.value = editor.innerHTML;
+                updateAlignment();
             });
+        });
+        document.addEventListener('selectionchange', () => {
+            if (editor.contains(document.getSelection()?.anchorNode)) updateAlignment();
         });
         editor.addEventListener('input', () => { source.value = editor.innerHTML; });
         form.addEventListener('submit', event => {

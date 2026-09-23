@@ -157,30 +157,40 @@ class ConvocationDocumentTest extends TestCase
 
     public function test_html_sanitizer_keeps_format_without_active_content(): void
     {
-        $clean = app(ConvocationDocuments::class)->cleanHtml('<p onclick="evil()">Bases <strong>claras</strong><script>alert(1)</script><a href="javascript:alert(1)">enlace</a></p>');
+        $clean = app(ConvocationDocuments::class)->cleanHtml('<p onclick="evil()" style="text-align:center;color:red">Bases <strong>claras</strong><script>alert(1)</script><a href="javascript:alert(1)">enlace</a></p><div align="justify">Texto justificado</div>');
         $this->assertStringContainsString('<strong>claras</strong>', $clean);
+        $this->assertStringContainsString('style="text-align:center"', $clean);
+        $this->assertStringContainsString('style="text-align:justify"', $clean);
         $this->assertStringNotContainsString('script', $clean);
         $this->assertStringNotContainsString('onclick', $clean);
         $this->assertStringNotContainsString('javascript:', $clean);
+        $this->assertStringNotContainsString('color:red', $clean);
     }
 
     public function test_service_template_is_editable_and_new_documents_use_its_style(): void
     {
         $this->be(LegacyUser::findOrFail(2));
         $this->get('/emision-convocatorias/plantillas/cafeteria')->assertOk()
-            ->assertSee('Entrega de la Propuesta')->assertSee('DejaVu Sans');
-        $body = '<h2>Convocatoria actualizada</h2><p>'.str_repeat('Bases editables para cafetería. ', 5).'</p>';
+            ->assertSee('Entrega de la Propuesta')->assertSee('DejaVu Sans')
+            ->assertSee('Centrar texto')->assertSee('Justificar texto');
+        $body = '<h2 style="text-align:center">Convocatoria actualizada</h2><p style="text-align:justify">'.str_repeat('Bases editables para cafetería. ', 5).'</p>';
         $this->post('/emision-convocatorias/plantillas/cafeteria', [
             'cuerpo_html' => $body, 'font_family' => 'dejavuserif', 'font_size' => '9.5',
         ])->assertRedirect();
         $this->assertDatabaseHas('ccyf_convocatoria_plantillas', ['servicio_id' => 1,
             'font_family' => 'dejavuserif', 'font_size' => 9.5]);
+        $this->assertStringContainsString('text-align:center', DB::table('ccyf_convocatoria_plantillas')->value('cuerpo_html'));
         $this->get('/emision-convocatorias/nueva?convocatoria=8')->assertOk()
-            ->assertSee('Convocatoria actualizada')->assertSee('value="9.5"', false);
+            ->assertSee('Convocatoria actualizada')->assertSee('value="9.5"', false)
+            ->assertSee('Centrar texto')->assertSee('Justificar texto');
         $this->post('/emision-convocatorias', $this->payload([
             'detalles_html' => $body, 'font_family' => 'dejavuserif', 'font_size' => '9.5',
         ]))->assertRedirect();
         $this->assertDatabaseHas('ccyf_convocatoria_documentos', ['font_family' => 'dejavuserif', 'font_size' => 9.5]);
+        $this->assertStringContainsString('text-align:justify', DB::table('ccyf_convocatoria_documentos')->value('detalles_html'));
+        $this->post('/emision-convocatorias/vista-previa', $this->payload([
+            'detalles_html' => $body, 'font_family' => 'dejavuserif', 'font_size' => '9.5',
+        ]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
     }
 
     public function test_full_service_template_can_be_rendered_to_pdf(): void

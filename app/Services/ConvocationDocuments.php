@@ -108,7 +108,7 @@ class ConvocationDocuments
         if (! $node instanceof DOMElement) {
             return;
         }
-        $allowed = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h2', 'h3', 'ol', 'ul', 'li',
+        $allowed = ['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 'h2', 'h3', 'ol', 'ul', 'li',
             'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'a'];
         $name = strtolower($node->tagName);
         if (in_array($name, ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'img', 'svg'], true)) {
@@ -126,9 +126,20 @@ class ConvocationDocuments
             return;
         }
         $href = $name === 'a' ? trim($node->getAttribute('href')) : '';
+        $alignment = null;
+        if (in_array($name, ['p', 'div', 'h2', 'h3', 'li', 'blockquote', 'td', 'th'], true)) {
+            if (preg_match('/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i',
+                $node->getAttribute('style'), $match)) {
+                $alignment = strtolower($match[1]);
+            } elseif (in_array(strtolower($node->getAttribute('align')),
+                ['left', 'center', 'right', 'justify'], true)) {
+                $alignment = strtolower($node->getAttribute('align'));
+            }
+        }
         foreach (iterator_to_array($node->attributes) as $attribute) {
             $node->removeAttribute($attribute->name);
         }
+        if ($alignment !== null) $node->setAttribute('style', 'text-align:'.$alignment);
         if ($name === 'a' && preg_match('~^https?://~i', $href)) {
             $node->setAttribute('href', $href);
         }
@@ -158,7 +169,7 @@ class ConvocationDocuments
             table{width:100%;border-collapse:collapse;font-size:'.max(7, $fontSize - 1).'pt;margin-top:9px}
             th{background:#611232;color:#fff;text-align:left;padding:7px}
             td{border-bottom:1px solid #ded7d9;padding:7px;vertical-align:top}
-            .details p{margin:0 0 9px}.details li{margin-bottom:5px}
+            .details p{margin:0 0 9px;text-align:justify}.details li{margin-bottom:5px}
             .details table td,.details table th{border:1px solid #ded7d9}
             .footer{color:#776b70;font-size:7pt;margin-top:25px;border-top:1px solid #ded7d9;padding-top:7px}
         </style></head><body>'
