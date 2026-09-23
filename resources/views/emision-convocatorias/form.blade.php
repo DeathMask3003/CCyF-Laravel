@@ -44,4 +44,4 @@
     @endif
 </div>
 @endsection
-@push('scripts')<script src="{{ asset('js/emision-convocatorias.js') }}?v=5" defer></script>@endpush
+@push('scripts')<script src="{{ asset('js/emision-convocatorias.js') }}?v=6" defer></script>@endpush

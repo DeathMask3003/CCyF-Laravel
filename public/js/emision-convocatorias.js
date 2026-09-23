@@ -47,7 +47,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const optionsElement = document.getElementById('emision-campus-options');
     const tbody = document.getElementById('emision-table-body');
     if (!optionsElement || !tbody) return;
-    const campuses = JSON.parse(optionsElement.textContent);
+    const campuses = JSON.parse(optionsElement.textContent).sort((left, right) => {
+        const group = campus => /^plantel\s/i.test(campus.nombre) ? 0 : 1;
+        return group(left) - group(right) || left.nombre.localeCompare(right.nombre, 'es', { numeric: true });
+    });
     const search = document.getElementById('emision-campus-search');
     const list = document.getElementById('emision-suggestions');
     const add = document.getElementById('emision-add-campus');
@@ -76,13 +79,18 @@ document.addEventListener('DOMContentLoaded', () => {
         add.disabled = true;
         list.replaceChildren();
         const term = norm(search.value.trim());
-        const matches = campuses.filter(campus => !added().has(campus.id) && norm(campus.nombre).includes(term)).slice(0, 10);
+        const matches = campuses.filter(campus => !added().has(campus.id) && norm(campus.nombre).includes(term));
         if (!matches.length) {
             const item = document.createElement('div');
             item.className = 'emision-suggestion-empty';
             item.textContent = term ? 'No hay planteles disponibles con esa búsqueda.' : 'Todos los planteles están agregados.';
             list.append(item);
         } else {
+            const summary = document.createElement('div');
+            summary.className = 'emision-suggestion-empty';
+            summary.setAttribute('role', 'note');
+            summary.textContent = `${matches.length} disponibles · Desplázate o escribe para filtrar`;
+            list.append(summary);
             matches.forEach(campus => {
                 const item = document.createElement('button');
                 item.type = 'button';
@@ -109,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!available.length) return;
             highlighted = (highlighted + (event.key === 'ArrowDown' ? 1 : -1) + available.length) % available.length;
             available.forEach((item, index) => item.classList.toggle('active', index === highlighted));
+            available[highlighted].scrollIntoView({ block: 'nearest' });
         }
         if (event.key === 'Enter') {
             event.preventDefault();
