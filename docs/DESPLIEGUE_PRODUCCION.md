@@ -30,7 +30,9 @@ Set-Location 'C:\xampp\htdocs\ccyf-laravel'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\deploy\windows-server2022\install-on-xampp.ps1' -UseExistingCheckout
 ```
 
-El instalador verifica el repositorio y la rama, instala dependencias con PHP de XAMPP, crea `.env` desde la plantilla y genera `APP_KEY`. Se detiene si existe `.env` o hay cambios locales. También puede ejecutarse fuera del checkout sin `-UseExistingCheckout` para que haga el clon. No migra la base, no copia expedientes ni cambia Apache; esos pasos requieren verificar el estado real del servidor.
+El instalador verifica el repositorio y la rama, instala dependencias con PHP de XAMPP, crea `.env` si falta y genera `APP_KEY` solo si está vacía. Conserva un `.env` existente para reanudar una instalación interrumpida. Se detiene si hay cambios locales. También puede ejecutarse fuera del checkout sin `-UseExistingCheckout` para que haga el clon. No migra la base, no copia expedientes ni cambia Apache; esos pasos requieren verificar el estado real del servidor.
+
+El XAMPP de destino informó PHP 8.2.12. El archivo de dependencias fija ZipStream 3.1.2, compatible con PHP 8.2. Si el primer intento terminó durante Composer, no clonar de nuevo ni ejecutar `composer update` en el servidor: dentro de `C:\xampp\htdocs\ccyf-laravel`, ejecutar `git pull --ff-only` y repetir el instalador con `-UseExistingCheckout`.
 
 1. En Windows Server verificar que el PHP usado por Apache coincide con `C:\xampp\php\php.exe`. Ejecutar `deploy/windows-server2022/check-server.ps1` una vez creados `.env` y la carpeta de expedientes. Confirmar los requisitos de plataforma con `composer check-platform-reqs --no-dev`.
 2. En el VirtualHost HTTPS existente, establecer `DocumentRoot "C:/xampp/htdocs/ccyf-laravel/public"` y un bloque `<Directory "C:/xampp/htdocs/ccyf-laravel/public">` con `AllowOverride All` y `Require all granted`. Habilitar `mod_rewrite`. Mantener la carpeta `ccyf-laravel` y su `.env` fuera de la raíz pública; el archivo `.htaccess` de la raíz del proyecto también deniega acceso directo.

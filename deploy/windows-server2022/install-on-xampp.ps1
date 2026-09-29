@@ -14,18 +14,18 @@ if (-not $project.StartsWith($htdocs + '\', [System.StringComparison]::OrdinalIg
     throw "El proyecto debe instalarse dentro de $htdocs."
 }
 if (-not (Test-Path -LiteralPath $php)) {
-    throw "No se encontró PHP de XAMPP: $php"
+    throw "No se encontro PHP de XAMPP: $php"
 }
 foreach ($command in @('git', 'composer')) {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
-        throw "No se encontró $command en PATH."
+        throw "No se encontro $command en PATH."
     }
 }
 
 $env:PATH = (Join-Path $XamppRoot 'php') + ';' + $env:PATH
 if ($UseExistingCheckout) {
     if (-not (Test-Path -LiteralPath (Join-Path $project '.git'))) {
-        throw "No se encontró un checkout Git en $project."
+        throw "No se encontro un checkout Git en $project."
     }
     $actualRepository = (& git -C $project remote get-url origin).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $actualRepository.Equals($Repository, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -37,27 +37,33 @@ if ($UseExistingCheckout) {
     }
     $changes = @(& git -C $project status --porcelain)
     if ($LASTEXITCODE -ne 0 -or $changes.Count -gt 0) {
-        throw 'El checkout tiene cambios locales. Revísalos antes de instalar.'
+        throw 'El checkout tiene cambios locales. Revisalos antes de instalar.'
     }
 } else {
     if (Test-Path -LiteralPath $project) {
-        throw "La carpeta $project ya existe. Revísala antes de instalar para no sobrescribir datos."
+        throw "La carpeta $project ya existe. Revisala antes de instalar para no sobrescribir datos."
     }
     & git clone --branch main --single-branch $Repository $project
-    if ($LASTEXITCODE -ne 0) { throw 'Falló la descarga del repositorio.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Fallo la descarga del repositorio.' }
 }
 
 Push-Location $project
 try {
     if (Test-Path -LiteralPath '.env') {
-        throw 'Ya existe .env. Este instalador es para la primera instalación y no lo reemplazará.'
+        Write-Host 'Se conserva el archivo .env existente.'
+    } else {
+        Copy-Item -LiteralPath 'deploy\windows-server2022\env.production.example' -Destination '.env' -ErrorAction Stop
     }
-    Copy-Item -LiteralPath 'deploy\windows-server2022\env.production.example' -Destination '.env' -ErrorAction Stop
     & composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
-    if ($LASTEXITCODE -ne 0) { throw 'Falló la instalación de dependencias con Composer.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Fallo la instalacion de dependencias con Composer.' }
 
-    & $php artisan key:generate --force --no-interaction
-    if ($LASTEXITCODE -ne 0) { throw 'No se pudo generar APP_KEY.' }
+    $keyLine = Get-Content -LiteralPath '.env' | Where-Object { $_ -match '^APP_KEY=' } | Select-Object -First 1
+    if (-not $keyLine -or $keyLine -match '^APP_KEY=\s*$') {
+        & $php artisan key:generate --force --no-interaction
+        if ($LASTEXITCODE -ne 0) { throw 'No se pudo generar APP_KEY.' }
+    } else {
+        Write-Host 'Se conserva APP_KEY existente.'
+    }
 
     & composer check-platform-reqs --no-dev
     if ($LASTEXITCODE -ne 0) { throw 'PHP de XAMPP no cumple los requisitos de Composer.' }
@@ -65,5 +71,5 @@ try {
     Pop-Location
 }
 
-Write-Host "Código instalado en $project"
+Write-Host "Codigo instalado en $project"
 Write-Host 'Completa .env con credenciales, URL y correo; copia los expedientes; verifica la base ccyflaravel antes de ejecutar migraciones.'
