@@ -1,6 +1,9 @@
 @extends('layouts.app')
 
 @section('title', 'Seguimiento de permisionarios')
+@push('head')
+<link rel="stylesheet" href="{{ asset('css/seguimiento-download.css') }}?v=20260928-1">
+@endpush
 
 @section('content')
 <div class="page-heading review-heading">
@@ -92,6 +95,12 @@
     @if($rows->hasPages())<nav class="pagination" aria-label="Páginas de permisionarios">@if($rows->onFirstPage())<span>← Anterior</span>@else<a href="{{ $rows->previousPageUrl() }}">← Anterior</a>@endif<strong>Página {{ $rows->currentPage() }} de {{ $rows->lastPage() }}</strong>@if($rows->hasMorePages())<a href="{{ $rows->nextPageUrl() }}">Siguiente →</a>@else<span>Siguiente →</span>@endif</nav>@endif
 </section>
 <dialog id="tracking-pdf-dialog" class="tracking-pdf-dialog"><div><strong id="tracking-pdf-title">Archivo PDF</strong><button type="button" id="tracking-pdf-close" class="outline-button">Cerrar</button></div><iframe id="tracking-pdf-frame" title="Visor de archivo PDF"></iframe></dialog>
+<dialog id="tracking-download-dialog" class="tracking-download-dialog" aria-labelledby="tracking-download-title" aria-describedby="tracking-download-description">
+    <div class="tracking-download-spinner" aria-hidden="true"></div>
+    <strong id="tracking-download-title">Preparando expediente</strong>
+    <p id="tracking-download-description">Estamos reuniendo los documentos, la evaluación, la carta y el seguimiento. La descarga comenzará en unos momentos.</p>
+</dialog>
+<div id="tracking-download-error" class="tracking-download-error" role="alert" hidden></div>
 @push('scripts')
 <script>
 (() => {
@@ -105,6 +114,55 @@
     const dialog = document.getElementById('tracking-pdf-dialog'), frame = document.getElementById('tracking-pdf-frame');
     document.querySelectorAll('.tracking-preview').forEach(link => link.addEventListener('click', e => { e.preventDefault(); document.getElementById('tracking-pdf-title').textContent = link.dataset.title; frame.src = link.href; dialog.showModal(); }));
     document.getElementById('tracking-pdf-close').addEventListener('click', () => dialog.close()); dialog.addEventListener('close', () => { frame.src = 'about:blank'; });
+    const downloadDialog = document.getElementById('tracking-download-dialog');
+    const downloadError = document.getElementById('tracking-download-error');
+    let downloading = false;
+    const cookieName = token => 'ccyf_expediente_descarga_' + token;
+    const downloadStarted = token => document.cookie.split('; ').some(part => part.startsWith(cookieName(token) + '='));
+    const clearCookie = token => { document.cookie = cookieName(token) + '=; Max-Age=0; Path=/; SameSite=Lax'; };
+    downloadDialog.addEventListener('cancel', event => event.preventDefault());
+    document.querySelectorAll('.tracking-expedient').forEach(link => link.addEventListener('click', event => {
+        event.preventDefault();
+        if (downloading) return;
+        downloading = true;
+        downloadError.hidden = true;
+        const token = window.crypto?.randomUUID?.() || String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+        const url = new URL(link.href);
+        url.searchParams.set('descarga', token);
+        const downloadFrame = document.createElement('iframe');
+        downloadFrame.className = 'tracking-download-frame';
+        downloadFrame.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(downloadFrame);
+        downloadDialog.showModal();
+        let poll;
+        let timeout;
+        let done = false;
+        const finish = message => {
+            if (done) return;
+            done = true;
+            clearInterval(poll);
+            clearTimeout(timeout);
+            clearCookie(token);
+            downloadDialog.close();
+            downloading = false;
+            if (message) {
+                downloadError.textContent = message;
+                downloadError.hidden = false;
+            }
+            setTimeout(() => downloadFrame.remove(), 30000);
+        };
+        poll = setInterval(() => { if (downloadStarted(token)) finish(); }, 250);
+        timeout = setTimeout(() => finish('No se pudo iniciar la descarga del expediente. Inténtalo de nuevo.'), 120000);
+        downloadFrame.addEventListener('load', () => {
+            if (downloadStarted(token)) return finish();
+            try {
+                if (downloadFrame.contentDocument?.body?.textContent?.trim()) {
+                    finish('No se pudo preparar el expediente. Inténtalo de nuevo.');
+                }
+            } catch (_) { /* La descarga puede ser gestionada por el navegador. */ }
+        });
+        downloadFrame.src = url.toString();
+    }));
 })();
 </script>
 @endpush

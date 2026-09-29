@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\LegacyUser;
 use App\Services\LegacyMenu;
 use App\Services\LegacyPasswordVerifier;
+use App\Services\TurnstileVerification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,12 +20,15 @@ class AccessController extends Controller
         return view('auth.login');
     }
 
-    public function store(Request $request, LegacyPasswordVerifier $passwords, LegacyMenu $menu): RedirectResponse
+    public function store(Request $request, LegacyPasswordVerifier $passwords, LegacyMenu $menu, TurnstileVerification $turnstile): RedirectResponse
     {
         $credentials = $request->validate([
             'email' => ['required', 'email', 'max:150'],
             'password' => ['required', 'string', 'max:255'],
+            'remember' => ['sometimes', 'boolean'],
         ]);
+
+        $turnstile->verify($request, 'login');
 
         try {
             $user = LegacyUser::query()
@@ -42,7 +46,7 @@ class AccessController extends Controller
         }
 
         $this->clearPending($request);
-        Auth::login($user);
+        Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
         return redirect()->intended(route('dashboard'));

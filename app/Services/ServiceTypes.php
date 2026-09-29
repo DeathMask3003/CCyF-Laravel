@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Support\LegacyTimestamps;
 
 class ServiceTypes
 {
@@ -28,8 +29,7 @@ class ServiceTypes
                     'descripcion' => $service->trami_descrip,
                     'plantilla' => $this->templateFor((int) $service->trami_id, (string) $service->trami_nom),
                     'activo' => (bool) $service->est,
-                    'created_at' => $service->fech_crea ?: now(),
-                    'updated_at' => $service->fech_modif ?: ($service->fech_crea ?: now()),
+                    ...LegacyTimestamps::from($service),
                 ]);
                 $imported++;
             }

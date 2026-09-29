@@ -1,6 +1,10 @@
 <?php
 
 use App\Http\Controllers\Auth\AccessController;
+use App\Http\Controllers\Auth\GoogleController;
+use App\Http\Controllers\Auth\PasswordRecoveryController;
+use App\Http\Controllers\Auth\RegistrationController;
+use App\Http\Controllers\BrandingController;
 use App\Http\Controllers\AcceptedProposalController;
 use App\Http\Controllers\CampusController;
 use App\Http\Controllers\ConvocationController;
@@ -8,6 +12,7 @@ use App\Http\Controllers\ConvocationDocumentController;
 use App\Http\Controllers\ConvocationLinkController;
 use App\Http\Controllers\CcyfRoleController;
 use App\Http\Controllers\CcyfUserController;
+use App\Http\Controllers\ComplaintController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\DocumentUpdateController;
 use App\Http\Controllers\FinishedExportController;
@@ -23,22 +28,51 @@ use App\Http\Controllers\ServiceTypeController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/panel');
+Route::get('/marca/logo', [BrandingController::class, 'logo'])->name('branding.logo');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/acceso', [AccessController::class, 'create'])->name('login');
     Route::post('/acceso', [AccessController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+    Route::get('/acceso/google', [GoogleController::class, 'redirect'])->middleware('throttle:5,1')->name('login.google');
+    Route::get('/registro', [RegistrationController::class, 'create'])->name('register');
+    Route::post('/registro', [RegistrationController::class, 'store'])->middleware('throttle:5,1')->name('register.store');
+    Route::get('/recuperar-acceso', [PasswordRecoveryController::class, 'request'])->name('password.request');
+    Route::post('/recuperar-acceso', [PasswordRecoveryController::class, 'email'])->middleware('throttle:5,1')->name('password.email');
+    Route::get('/restablecer-acceso/{token}', [PasswordRecoveryController::class, 'edit'])->name('password.reset');
+    Route::post('/restablecer-acceso', [PasswordRecoveryController::class, 'update'])->middleware('throttle:5,1')->name('password.update');
     Route::redirect('/verificacion', '/acceso');
 });
 
+Route::get('/acceso/google/callback', [GoogleController::class, 'callback'])->middleware('throttle:10,1')->name('login.google.callback');
+
 Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
+    Route::get('/administracion/identidad', [BrandingController::class, 'edit'])->name('branding.edit');
+    Route::put('/administracion/identidad', [BrandingController::class, 'update'])
+        ->middleware('throttle:10,1')->name('branding.update');
     Route::get('/panel', fn () => view('dashboard'))->name('dashboard');
     Route::post('/salir', [AccessController::class, 'destroy'])->name('logout');
     Route::get('/mi-perfil', [ProfileController::class, 'show'])->name('perfil.show');
+    Route::get('/mi-perfil/google/vincular', [GoogleController::class, 'link'])->middleware('throttle:5,1')->name('perfil.google.link');
+    Route::get('/mi-perfil/foto', [ProfileController::class, 'photo'])->name('perfil.photo');
+    Route::post('/mi-perfil/foto', [ProfileController::class, 'uploadPhoto'])->middleware('throttle:5,1')->name('perfil.photo-upload');
     Route::get('/mi-perfil/firma', [ProfileController::class, 'signature'])->name('perfil.signature');
     Route::post('/mi-perfil/firma', [ProfileController::class, 'uploadSignature'])->middleware('throttle:5,1')->name('perfil.signature-upload');
+    Route::post('/mi-perfil/efirma', [ProfileController::class, 'uploadSatSignature'])->middleware('throttle:5,1')->name('perfil.sat-upload');
+    Route::delete('/mi-perfil/efirma', [ProfileController::class, 'deleteSatSignature'])->middleware('throttle:5,1')->name('perfil.sat-delete');
+    Route::put('/mi-perfil/firma/metodo', [ProfileController::class, 'signatureMethod'])->name('perfil.signature-method');
     Route::put('/mi-perfil', [ProfileController::class, 'update'])->name('perfil.update');
     Route::put('/mi-perfil/contrasena', [ProfileController::class, 'password'])->middleware('throttle:5,1')->name('perfil.password');
     Route::get('/ubicaciones', [LocationController::class, 'index'])->name('ubicaciones.index');
+
+    Route::get('/observaciones-quejas', [ComplaintController::class, 'index'])->name('quejas.index');
+    Route::get('/observaciones-quejas/manual/nueva', [ComplaintController::class, 'createManual'])->name('quejas.manual.create');
+    Route::post('/observaciones-quejas/manual', [ComplaintController::class, 'storeManual'])->name('quejas.manual.store');
+    Route::get('/observaciones-quejas/manual/{complaint}/editar', [ComplaintController::class, 'editManual'])->whereNumber('complaint')->name('quejas.manual.edit');
+    Route::put('/observaciones-quejas/manual/{complaint}', [ComplaintController::class, 'updateManual'])->whereNumber('complaint')->name('quejas.manual.update');
+    Route::patch('/observaciones-quejas/manual/{complaint}/estado', [ComplaintController::class, 'toggleManual'])->whereNumber('complaint')->name('quejas.manual.toggle');
+    Route::get('/observaciones-quejas/evidencias/{origin}/{id}', [ComplaintController::class, 'evidence'])->whereIn('origin', ['historico', 'local'])->whereNumber('id')->name('quejas.evidence');
+    Route::get('/observaciones-quejas/participaciones/{origin}/{record}', [ComplaintController::class, 'show'])->whereIn('origin', ['historico', 'actual'])->whereNumber('record')->name('quejas.show');
+    Route::post('/observaciones-quejas/participaciones/{origin}/{record}', [ComplaintController::class, 'store'])->whereIn('origin', ['historico', 'actual'])->whereNumber('record')->name('quejas.store');
 
     Route::get('/contratos-permisionarios', [AcceptedProposalController::class, 'index'])->name('contratos.index');
     Route::post('/contratos-permisionarios/enviar-seleccionados', [AcceptedProposalController::class, 'sendBulk'])
@@ -76,6 +110,10 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/convocatorias-pendientes', [OfficeReviewController::class, 'pending'])->name('revision.pending');
     Route::get('/emision-convocatorias', [ConvocationDocumentController::class, 'index'])->name('emision.index');
     Route::get('/emision-convocatorias/nueva', [ConvocationDocumentController::class, 'create'])->name('emision.create');
+    Route::post('/emision-convocatorias/imagenes', [ConvocationDocumentController::class, 'uploadImage'])
+        ->middleware('throttle:20,1')->name('emision.images.upload');
+    Route::get('/emision-convocatorias/imagenes/{image}', [ConvocationDocumentController::class, 'image'])
+        ->where('image', '[0-9a-f-]{36}\\.(?:png|jpg)')->name('emision.image');
     Route::get('/emision-convocatorias/plantillas/{service}', [ConvocationDocumentController::class, 'template'])
         ->whereIn('service', ['cafeteria', 'fotocopiado'])->name('emision.template');
     Route::post('/emision-convocatorias/plantillas/{service}', [ConvocationDocumentController::class, 'saveTemplate'])
@@ -85,6 +123,7 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/emision-convocatorias/{document}/editar', [ConvocationDocumentController::class, 'edit'])->whereNumber('document')->name('emision.edit');
     Route::put('/emision-convocatorias/{document}', [ConvocationDocumentController::class, 'update'])->whereNumber('document')->name('emision.update');
     Route::get('/emision-convocatorias/{document}/pdf', [ConvocationDocumentController::class, 'pdf'])->whereNumber('document')->name('emision.pdf');
+    Route::post('/convocatorias-pendientes/finalizar-masivo', [OfficeReviewController::class, 'finishBulk'])->name('revision.finish-bulk');
     Route::post('/convocatorias-pendientes/no-aceptadas', [OfficeReviewController::class, 'rejectBulk'])->name('revision.reject-bulk');
     Route::get('/convocatorias-finalizadas', [OfficeReviewController::class, 'finished'])->name('revision.finished');
     Route::get('/convocatorias-finalizadas/exportar/{format}', [FinishedExportController::class, 'download'])
@@ -92,7 +131,10 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/expedientes/{record}', [OfficeReviewController::class, 'show'])->whereNumber('record')->name('revision.show');
     Route::get('/expedientes/{record}/evaluacion-final.pdf', [OfficeReviewController::class, 'localFinalEvaluationPdf'])
         ->whereNumber('record')->name('revision.final-evaluation-pdf');
+    Route::get('/expedientes/{record}/carta-resultado.pdf', [OfficeReviewController::class, 'localResultLetterPdf'])
+        ->whereNumber('record')->name('revision.result-letter-pdf');
     Route::post('/expedientes/{record}/finalizar', [OfficeReviewController::class, 'finish'])->whereNumber('record')->name('revision.finish');
+    Route::post('/expedientes/{record}/notificar', [OfficeReviewController::class, 'notify'])->whereNumber('record')->name('revision.notify');
     Route::get('/expedientes/{record}/archivos/{file}', [OfficeReviewController::class, 'file'])->whereNumber(['record', 'file'])->name('revision.file');
     Route::get('/convocatorias-finalizadas/historico/{record}', [OfficeReviewController::class, 'historical'])->whereNumber('record')->name('revision.historical');
     Route::get('/convocatorias-finalizadas/historico/{record}/evaluacion-final.pdf', [OfficeReviewController::class, 'historicalFinalEvaluationPdf'])
@@ -109,17 +151,23 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/seguimiento-permisionarios/exportar/{format}', [PermitTrackingExportController::class, 'download'])->whereIn('format', ['pdf', 'xlsx', 'csv'])->name('seguimiento.export');
 
     Route::get('/prevaluaciones', [PrevaluationController::class, 'index'])->name('prevaluaciones.index');
+    Route::get('/prevaluaciones/anexo-global.pdf', [PrevaluationController::class, 'annex'])->name('prevaluaciones.annex');
+    Route::get('/prevaluaciones/asignaciones', [PrevaluationController::class, 'assignments'])->name('prevaluaciones.assignments');
+    Route::post('/prevaluaciones/asignaciones', [PrevaluationController::class, 'assign'])->name('prevaluaciones.assign');
+    Route::post('/prevaluaciones/asignaciones/todas', [PrevaluationController::class, 'assignBulk'])->name('prevaluaciones.assign-bulk');
     Route::post('/prevaluaciones/{key}/tomar', [PrevaluationController::class, 'claim'])->name('prevaluaciones.claim');
     Route::delete('/prevaluaciones/{key}/tomar', [PrevaluationController::class, 'release'])->name('prevaluaciones.release');
     Route::put('/prevaluaciones/{key}', [PrevaluationController::class, 'save'])->name('prevaluaciones.save');
     Route::put('/prevaluaciones/{key}/observaciones', [PrevaluationController::class, 'note'])->name('prevaluaciones.note');
     Route::get('/prevaluaciones/{key}/documentos/{field}', [PrevaluationController::class, 'file'])->name('prevaluaciones.file');
+    Route::post('/prevaluaciones/{key}/documentos/{field}/visto', [PrevaluationController::class, 'viewed'])->name('prevaluaciones.viewed');
     Route::get('/prevaluaciones/{key}/reporte.pdf', [PrevaluationController::class, 'report'])->name('prevaluaciones.report');
 
     Route::get('/catalogos', [PriceCatalogController::class, 'index'])->name('catalogos.index');
     Route::get('/catalogos/{category}', [PriceCatalogController::class, 'show'])->whereNumber('category')->name('catalogos.show');
     Route::post('/catalogos/{category}', [PriceCatalogController::class, 'prepare'])->whereNumber('category')->name('catalogos.prepare');
     Route::post('/catalogos/{category}/productos', [PriceCatalogController::class, 'storeProduct'])->whereNumber('category')->name('catalogos.products.store');
+    Route::put('/catalogos/{category}/productos', [PriceCatalogController::class, 'updateProducts'])->whereNumber('category')->name('catalogos.products.update-bulk');
     Route::put('/catalogos/{category}/productos/{product}', [PriceCatalogController::class, 'updateProduct'])->whereNumber(['category', 'product'])->name('catalogos.products.update');
 
     Route::get('/tipos-documento', [DocumentTypeController::class, 'index'])->name('tipos.index');

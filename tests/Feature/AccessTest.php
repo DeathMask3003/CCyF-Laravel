@@ -3,10 +3,17 @@
 namespace Tests\Feature;
 
 use App\Models\LegacyUser;
+use App\Notifications\CcyfResetPassword;
 use App\Services\LegacyPasswordVerifier;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\User as GoogleUser;
 use Tests\TestCase;
 
 class AccessTest extends TestCase
@@ -61,6 +68,91 @@ class AccessTest extends TestCase
         $this->get('/acceso')->assertOk();
     }
 
+    public function test_integrations_stay_off_outside_production_even_with_keys(): void
+    {
+        config()->set('app.env', 'local');
+        config()->set('ccyf.turnstile.enabled', true);
+        config()->set('ccyf.turnstile.site_key', 'site-test');
+        config()->set('ccyf.turnstile.secret_key', 'secret-test');
+        config()->set('ccyf.google_login_enabled', true);
+        config()->set('services.google', ['client_id' => 'id', 'client_secret' => 'secret', 'redirect' => 'https://example.test/acceso/google/callback']);
+        Http::fake();
+
+        $this->get('/acceso')->assertOk()->assertDontSee('cf-turnstile')->assertDontSee('login/google');
+        $this->get('/acceso/google')->assertNotFound();
+        $this->post('/acceso', ['email' => 'prueba@example.test', 'password' => 'clave-prueba'])->assertRedirect('/panel');
+        Http::assertNothingSent();
+    }
+
+    public function test_turnstile_fails_closed_in_production_and_checks_action_and_hostname(): void
+    {
+        config()->set('app.env', 'production');
+        config()->set('app.url', 'https://ccyf.example.test');
+        config()->set('ccyf.turnstile.enabled', true);
+        config()->set('ccyf.turnstile.site_key', 'site-test');
+        config()->set('ccyf.turnstile.secret_key', 'secret-test');
+
+        $this->get('/acceso')->assertSee('cf-turnstile');
+        $this->post('/acceso', ['email' => 'prueba@example.test', 'password' => 'clave-prueba'])
+            ->assertSessionHasErrors('cf-turnstile-response');
+        $this->assertGuest();
+
+        Http::fakeSequence()
+            ->push(['success' => true, 'action' => 'register', 'hostname' => 'ccyf.example.test'])
+            ->push(['success' => true, 'action' => 'login', 'hostname' => 'ccyf.example.test']);
+        $this->post('/acceso', ['email' => 'prueba@example.test', 'password' => 'clave-prueba', 'cf-turnstile-response' => 'token'])
+            ->assertSessionHasErrors('cf-turnstile-response');
+        $this->assertGuest();
+
+        $this->post('/acceso', ['email' => 'prueba@example.test', 'password' => 'clave-prueba', 'cf-turnstile-response' => 'token'])
+            ->assertRedirect('/panel');
+        $this->assertAuthenticated();
+    }
+
+    public function test_google_sign_in_links_a_verified_gmail_account_by_stable_id(): void
+    {
+        config()->set('app.env', 'production');
+        config()->set('ccyf.google_login_enabled', true);
+        config()->set('services.google', ['client_id' => 'id', 'client_secret' => 'secret', 'redirect' => 'https://ccyf.example.test/acceso/google/callback']);
+        DB::table('ccyf_usuarios')->where('usu_id', 7)->update(['usu_correo' => 'prueba@gmail.com']);
+        Socialite::fake('google', GoogleUser::fake(['id' => 'google-123', 'email' => 'prueba@gmail.com', 'email_verified' => true]));
+
+        $this->get('/acceso')->assertSee('acceso/google');
+        $this->get('/acceso/google')->assertRedirect('https://socialite.fake/google/authorize');
+        $this->get('/acceso/google/callback')->assertRedirect('/panel');
+        $this->assertSame('google-123', DB::table('ccyf_usuarios')->where('usu_id', 7)->value('google_sub'));
+        $this->assertAuthenticatedAs(LegacyUser::findOrFail(7));
+    }
+
+    public function test_google_does_not_link_an_unverified_email(): void
+    {
+        config()->set('app.env', 'production');
+        config()->set('ccyf.google_login_enabled', true);
+        config()->set('services.google', ['client_id' => 'id', 'client_secret' => 'secret', 'redirect' => 'https://ccyf.example.test/acceso/google/callback']);
+        Socialite::fake('google', GoogleUser::fake(['id' => 'google-123', 'email' => 'prueba@example.test', 'email_verified' => false]));
+
+        $this->get('/acceso/google')->assertRedirect();
+        $this->get('/acceso/google/callback')->assertRedirect('/acceso')->assertSessionHasErrors('email');
+        $this->assertNull(DB::table('ccyf_usuarios')->where('usu_id', 7)->value('google_sub'));
+        $this->assertGuest();
+    }
+
+    public function test_public_registration_requires_turnstile_only_in_production(): void
+    {
+        config()->set('app.env', 'production');
+        config()->set('ccyf.turnstile.enabled', true);
+        config()->set('ccyf.turnstile.site_key', 'site-test');
+        config()->set('ccyf.turnstile.secret_key', 'secret-test');
+        DB::table('ccyf_roles')->insert(['rol_id' => 12, 'legacy_rol_id' => 1, 'rol_nom' => 'Concursante', 'est' => 1]);
+
+        $this->get('/registro')->assertSee('cf-turnstile');
+        $this->post('/registro', [
+            'nombre' => 'Persona de prueba', 'email' => 'nuevo@example.test', 'telefono' => '7222123456',
+            'password' => 'ClaveSegura123', 'password_confirmation' => 'ClaveSegura123',
+        ])->assertSessionHasErrors('cf-turnstile-response');
+        $this->assertDatabaseMissing('ccyf_usuarios', ['usu_correo' => 'nuevo@example.test']);
+    }
+
     public function test_valid_password_signs_in_without_email_code(): void
     {
         $this->post('/acceso', [
@@ -104,5 +196,75 @@ class AccessTest extends TestCase
         $verifier = app(LegacyPasswordVerifier::class);
         $this->assertTrue($verifier->verify('clave-vieja', base64_encode($iv.$ciphertext)));
         $this->assertFalse($verifier->verify('incorrecta', base64_encode($iv.$ciphertext)));
+    }
+
+    public function test_remember_me_persists_a_token(): void
+    {
+        $this->post('/acceso', [
+            'email' => 'prueba@example.test',
+            'password' => 'clave-prueba',
+            'remember' => '1',
+        ])->assertRedirect('/panel');
+
+        $this->assertNotEmpty(DB::table('ccyf_usuarios')->where('usu_id', 7)->value('remember_token'));
+    }
+
+    public function test_public_registration_creates_only_a_contestant(): void
+    {
+        DB::table('ccyf_roles')->insert(['rol_id' => 12, 'legacy_rol_id' => 1, 'rol_nom' => 'Concursante', 'est' => 1]);
+
+        $this->post('/registro', [
+            'nombre' => 'Juan López',
+            'email' => 'NUEVO@example.test',
+            'telefono' => '7222123456',
+            'password' => 'ClaveSegura123',
+            'password_confirmation' => 'ClaveSegura123',
+            'rol_id' => 2,
+        ])->assertRedirect('/panel');
+
+        $user = DB::table('ccyf_usuarios')->where('usu_correo', 'nuevo@example.test')->first();
+        $this->assertNotNull($user);
+        $this->assertSame(12, $user->rol_id);
+        $this->assertSame('5217222123456', $user->usu_telf);
+        $this->assertTrue(Hash::check('ClaveSegura123', $user->usu_pass));
+        $this->assertAuthenticatedAs(LegacyUser::findOrFail($user->usu_id));
+    }
+
+    public function test_duplicate_email_cannot_register_again(): void
+    {
+        DB::table('ccyf_roles')->insert(['rol_id' => 1, 'legacy_rol_id' => 1, 'rol_nom' => 'Concursante', 'est' => 1]);
+        $this->post('/registro', [
+            'nombre' => 'Otra Persona',
+            'email' => 'PRUEBA@example.test',
+            'telefono' => '7222123456',
+            'password' => 'ClaveSegura123',
+            'password_confirmation' => 'ClaveSegura123',
+        ])->assertSessionHasErrors('email');
+    }
+
+    public function test_recovery_sends_a_link_and_changes_only_the_target_account(): void
+    {
+        Notification::fake();
+        DB::table('ccyf_usuarios')->insert([
+            'usu_id' => 8, 'usu_area' => 'Otra cuenta', 'usu_correo' => 'prueba@example.test',
+            'usu_pass' => Hash::make('OtraClave123'), 'rol_id' => 1, 'est' => 1,
+        ]);
+
+        $this->post('/recuperar-acceso', ['email' => 'prueba@example.test'])
+            ->assertSessionHas('status');
+        Notification::assertSentTo(LegacyUser::findOrFail(7), CcyfResetPassword::class);
+        Notification::assertSentTo(LegacyUser::findOrFail(8), CcyfResetPassword::class);
+        $this->assertSame(2, DB::table('password_reset_tokens')->count());
+
+        $token = Password::broker()->createToken(LegacyUser::findOrFail(7));
+        $this->get(route('password.reset', ['token' => $token, 'cuenta' => 7]))->assertOk();
+        $this->post('/restablecer-acceso', [
+            'cuenta' => 7, 'token' => $token,
+            'password' => 'NuevaClave123', 'password_confirmation' => 'NuevaClave123',
+        ])->assertRedirect('/acceso');
+
+        $this->assertTrue(Hash::check('NuevaClave123', LegacyUser::findOrFail(7)->usu_pass));
+        $this->assertTrue(Hash::check('OtraClave123', LegacyUser::findOrFail(8)->usu_pass));
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => '7']);
     }
 }

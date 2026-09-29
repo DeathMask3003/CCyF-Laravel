@@ -2,7 +2,7 @@
 
 @section('title', 'Mi perfil')
 @push('head')
-<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20260923-1">
+<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20260923-2">
 @endpush
 
 @section('content')
@@ -12,8 +12,9 @@
 </div>
 
 <div class="profile-summary panel">
-    <div class="profile-avatar" aria-hidden="true">{{ mb_substr($user->usu_area, 0, 1) }}</div>
+    <div class="profile-avatar" aria-hidden="true">@if($photoAvailable)<img src="{{ route('perfil.photo') }}" alt="">@else{{ mb_substr($user->usu_area, 0, 1) }}@endif</div>
     <div><strong>{{ $user->usu_area }}</strong><span>{{ $user->usu_correo }}</span></div>
+    <form method="post" action="{{ route('perfil.photo-upload') }}" enctype="multipart/form-data" class="profile-photo-form">@csrf<label for="profile-photo">Foto de perfil</label><input id="profile-photo" name="foto" type="file" accept="image/png,image/jpeg,image/webp" required><button type="submit" class="outline-button">Actualizar foto</button>@error('foto')<small class="field-error">{{ $message }}</small>@enderror</form>
     <span class="pill pill-ready">Cuenta activa</span>
 </div>
 
@@ -39,6 +40,14 @@
     </section>
 
     <div class="profile-side">
+        @if(app(\App\Services\ProductionIntegrations::class)->google())
+        <section class="panel profile-panel" aria-labelledby="google-title">
+            <span class="eyebrow">Acceso a la cuenta</span><h2 id="google-title">Google</h2>
+            <p class="muted">{{ $user->google_sub ? 'Tu cuenta de Google está vinculada.' : 'Vincula el mismo correo de tu perfil para iniciar sesión con Google.' }}</p>
+            <a class="outline-button button-link" href="{{ route('perfil.google.link') }}">{{ $user->google_sub ? 'Cambiar cuenta vinculada' : 'Vincular Google' }}</a>
+            @error('google')<p class="field-error" role="alert">{{ $message }}</p>@enderror
+        </section>
+        @endif
         @if ($canManageSignature)
         <section class="panel profile-panel signature-panel" aria-labelledby="signature-title">
             <span class="eyebrow">Uso administrativo</span><h2 id="signature-title">Mi firma</h2>
@@ -58,6 +67,30 @@
                 @error('firma')<small class="field-error">{{ $message }}</small>@enderror
                 <button class="button" type="submit">Guardar firma</button>
             </form>
+        </section>
+        <section class="panel profile-panel sat-panel" aria-labelledby="sat-title">
+            <span class="eyebrow">Identidad digital</span><h2 id="sat-title">e.firma del SAT</h2>
+            <p class="muted">Carga tu certificado .cer y tu clave .key. Se validan con tu contraseña; la contraseña no se guarda. Los archivos nuevos se conservan en almacenamiento privado.</p>
+            @if($satStatus['available'])
+                <div class="sat-status"><span class="pill {{ $satStatus['expired'] ? 'pill-pending' : 'pill-ready' }}">{{ $satStatus['expired'] ? 'Certificado vencido' : 'Certificado cargado' }}</span><strong>{{ $satStatus['alias'] }}</strong>
+                    @if($satStatus['serial'])<small>Serie: {{ $satStatus['serial'] }}</small>@endif
+                    @if($satStatus['validTo'])<small>Vigente hasta: {{ $satStatus['validTo'] }}</small>@endif
+                </div>
+                <form method="post" action="{{ route('perfil.sat-delete') }}" class="sat-delete-form" onsubmit="return confirm('Se borrarán físicamente tu certificado y tu clave privada del servidor. ¿Continuar?')">@csrf @method('delete')<button class="outline-button" type="submit">Eliminar e.firma y archivos</button>@error('efirma')<small class="field-error">{{ $message }}</small>@enderror</form>
+            @else
+                <div class="sat-empty">Aún no tienes un certificado y una clave privada cargados.</div>
+            @endif
+            <form method="post" action="{{ route('perfil.sat-upload') }}" enctype="multipart/form-data" class="sat-upload-form">@csrf
+                <label for="sat-alias">Alias</label><input id="sat-alias" name="alias" maxlength="80" value="{{ old('alias', $satStatus['alias']) }}" placeholder="Mi e.firma SAT">@error('alias')<small class="field-error">{{ $message }}</small>@enderror
+                <label for="sat-cer">Certificado .cer</label><input id="sat-cer" name="cer" type="file" accept=".cer,.crt,.pem" required>@error('cer')<small class="field-error">{{ $message }}</small>@enderror
+                <label for="sat-key">Clave privada cifrada .key</label><input id="sat-key" name="key" type="file" accept=".key,.pem" required>@error('key')<small class="field-error">{{ $message }}</small>@enderror
+                <label for="sat-password">Contraseña de la clave</label><input id="sat-password" name="password_sat" type="password" autocomplete="off" required>@error('password_sat')<small class="field-error">{{ $message }}</small>@enderror
+                <button class="button" type="submit">Validar y guardar e.firma</button>
+            </form>
+            @if($satStatus['available'] || $satStatus['imageAvailable'])
+                <form method="post" action="{{ route('perfil.signature-method') }}" class="sat-method-form">@csrf @method('put')<strong>Método preferido</strong><div><label><input type="radio" name="metodo" value="efirma" @checked($satStatus['method'] === 'efirma') @disabled(!$satStatus['available'])> e.firma SAT</label><label><input type="radio" name="metodo" value="imagen" @checked($satStatus['method'] === 'imagen') @disabled(!$satStatus['imageAvailable'])> Imagen de firma</label></div><button class="outline-button" type="submit">Guardar preferencia</button>@error('metodo')<small class="field-error">{{ $message }}</small>@enderror</form>
+            @endif
+            <small class="field-help">Registrar la e.firma no aplica por sí solo una firma criptográfica a los PDF.</small>
         </section>
         @endif
         <section class="panel profile-panel" aria-labelledby="password-title">

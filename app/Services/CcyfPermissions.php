@@ -21,6 +21,7 @@ class CcyfPermissions
         'Usuarios' => 'Gestión de usuarios',
         'Rol' => 'Gestión de roles',
         'convocatorias' => 'Emisión de convocatorias',
+        'quejas' => 'Observaciones y quejas',
     ];
 
     public static function groups(): array
@@ -30,7 +31,7 @@ class CcyfPermissions
             'Prevaluaciones' => array_slice(self::MODULES, 4, 2, true),
             'Documentación' => array_slice(self::MODULES, 6, 2, true),
             'Catálogos' => array_slice(self::MODULES, 8, 5, true),
-            'Administración' => array_slice(self::MODULES, 13, 2, true),
+            'Administración' => array_slice(self::MODULES, 13, 2, true) + ['quejas' => self::MODULES['quejas']],
         ];
     }
 }

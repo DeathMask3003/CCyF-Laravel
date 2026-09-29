@@ -3,7 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Services\LegacyMenu;
+use App\Services\FinalEvaluationReport;
+use App\Services\FinishedResultPdf;
 use App\Services\PermitTrackingRecords;
+use App\Services\PrevaluationRecords;
+use App\Services\ResultLetterPdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -149,7 +153,9 @@ class PermitTrackingController extends Controller
         ]);
     }
 
-    public function zip(string $key, Request $request, LegacyMenu $menu, PermitTrackingRecords $records): BinaryFileResponse
+    public function zip(string $key, Request $request, LegacyMenu $menu, PermitTrackingRecords $records,
+        FinalEvaluationReport $evaluation, PrevaluationRecords $prevaluations,
+        FinishedResultPdf $resultPdf, ResultLetterPdf $letter): BinaryFileResponse
     {
         $this->authorizeMenu($request, $menu);
         $row = $this->record($records, $key);
@@ -165,12 +171,21 @@ class PermitTrackingController extends Controller
             "Monto: ".($row->seguimiento?->monto ?? $row->monto_base ?? '')."\n".
             "Observaciones: ".($row->seguimiento?->observaciones ?? '')."\n";
         $zip->addFromString('00_INFORMACION/RESUMEN_EXPEDIENTE.txt', $summary);
+        foreach (['01_DOCUMENTACION_SUBIDA', '02_EVALUACION', '03_CARTA_DESIGNACION', '05_SEGUIMIENTO'] as $folder) {
+            $zip->addEmptyDir($folder);
+        }
+        $followupCount = 0;
         foreach ($row->archivos as $number => $file) {
             $source = $this->filePath($file);
             if ($source) {
                 $zip->addFile($source, '05_SEGUIMIENTO/archivo_'.$number.'.pdf');
+                $followupCount++;
             }
         }
+        if ($followupCount === 0) {
+            $zip->addFromString('05_SEGUIMIENTO/SIN_ARCHIVOS.txt', 'No se encontraron archivos 1-5 del seguimiento para este expediente.');
+        }
+        $documentCount = 0;
         if ($row->origen === 'historico') {
             $root = realpath(config('ccyf.legacy_files_root'));
             $folder = $root ? realpath($root.DIRECTORY_SEPARATOR.$row->registro_id) : false;
@@ -178,6 +193,7 @@ class PermitTrackingController extends Controller
                 foreach (new \DirectoryIterator($folder) as $file) {
                     if ($file->isFile() && ! $file->isLink() && strtolower($file->getExtension()) === 'pdf') {
                         $zip->addFile($file->getPathname(), '01_DOCUMENTACION_SUBIDA/'.$file->getBasename());
+                        $documentCount++;
                     }
                 }
             }
@@ -186,12 +202,50 @@ class PermitTrackingController extends Controller
             foreach ($documents as $document) {
                 if (Storage::disk('local')->exists($document->ruta)) {
                     $zip->addFile(Storage::disk('local')->path($document->ruta), '01_DOCUMENTACION_SUBIDA/'.$document->id.'.pdf');
+                    $documentCount++;
                 }
+            }
+        }
+        if ($documentCount === 0) {
+            $zip->addFromString('01_DOCUMENTACION_SUBIDA/SIN_DOCUMENTOS.txt', 'No se encontraron documentos subidos por el permisionario para este expediente.');
+        }
+
+        $evaluationSource = $evaluation->source($row->origen, $row->registro_id, $row->servicio);
+        if ($evaluationSource) {
+            $pdf = $evaluation->pdf($row, $evaluationSource, $prevaluations->detail($row), $request->user());
+            $zip->addFromString('02_EVALUACION/EVALUACION_DOC_'.$row->registro_id.'.pdf', $pdf->getContent());
+        } else {
+            $zip->addFromString('02_EVALUACION/SIN_EVALUACION.txt', 'Este expediente no tiene una evaluación final registrada.');
+        }
+
+        if ($row->origen === 'historico') {
+            $letterPath = $resultPdf->historical($row->registro_id, (int) $row->doc_designado === 1);
+            if ($letterPath) {
+                $zip->addFile($letterPath, '03_CARTA_DESIGNACION/'.basename($letterPath));
+            } else {
+                $zip->addFromString('03_CARTA_DESIGNACION/SIN_CARTA.txt', 'No se encontró la carta PDF archivada para este expediente.');
+            }
+        } else {
+            $registration = DB::table('ccyf_registros')->where('id', $row->registro_id)
+                ->first(['folio', 'solicitante', 'decision', 'respuesta', 'fecha_inicio', 'fecha_fin', 'monto', 'finalizado_at']);
+            if ($registration && $registration->decision === 'designado') {
+                $registration->plantel_nombre = $row->plantel;
+                $registration->servicio_nombre = $row->servicio;
+                $registration->convocatoria_nombre = $row->convocatoria;
+                $zip->addFromString('03_CARTA_DESIGNACION/Carta_Designacion_'.$registration->folio.'.pdf', $letter->render($registration));
+            } else {
+                $zip->addFromString('03_CARTA_DESIGNACION/SIN_CARTA.txt', 'Este expediente no tiene una carta de designación disponible.');
             }
         }
         $zip->close();
 
-        return response()->download($path, 'CCyF-expediente-'.$key.'.zip', ['Content-Type' => 'application/zip'])->deleteFileAfterSend(true);
+        $response = response()->download($path, 'CCyF-expediente-'.$key.'.zip', ['Content-Type' => 'application/zip'])->deleteFileAfterSend(true);
+        $token = (string) $request->query('descarga', '');
+        if (preg_match('/^[a-zA-Z0-9-]{16,80}$/', $token)) {
+            $response->headers->setCookie(cookie('ccyf_expediente_descarga_'.$token, 'ready', 5, '/', null, null, false, false, 'lax'));
+        }
+
+        return $response;
     }
 
     private function filePath(object $file): ?string

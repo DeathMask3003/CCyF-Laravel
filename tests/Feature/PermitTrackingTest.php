@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\LegacyUser;
+use App\Services\FinalEvaluationReport;
+use App\Services\PrevaluationRecords;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -37,8 +39,15 @@ class PermitTrackingTest extends TestCase
         Schema::connection('legacy')->create('tm_documento', function (Blueprint $table): void {
             $table->integer('doc_id')->primary(); $table->integer('trami_id'); $table->integer('usu_id');
             $table->string('doc_exter'); $table->date('doc_fech_ini'); $table->date('doc_fech_fin');
-            $table->dateTime('fech_crea'); $table->integer('est'); $table->integer('num_doc');
+            $table->dateTime('fech_crea'); $table->integer('est'); $table->integer('num_doc'); $table->integer('doc_designado')->default(1);
         });
+        foreach (['tm_preval_cafe_doc' => 'id_preval_cafe', 'tm_preval_foto_doc' => 'id_preval_foto'] as $tableName => $primary) {
+            Schema::connection('legacy')->create($tableName, function (Blueprint $table) use ($primary): void {
+                $table->integer($primary)->primary(); $table->integer('doc_id'); $table->integer('est');
+                $table->integer('viable_estado')->nullable(); $table->integer('usu_preval')->nullable();
+                $table->dateTime('fecha_registro')->nullable();
+            });
+        }
         Schema::connection('legacy')->create('tm_seguimiento_permisio', function (Blueprint $table): void {
             $table->integer('detapermi_id')->primary(); $table->integer('doc_id')->nullable(); $table->integer('est');
             $table->decimal('metros_cuadrados')->nullable(); $table->string('matricula')->nullable(); $table->decimal('monto')->nullable();
@@ -150,6 +159,50 @@ class PermitTrackingTest extends TestCase
         $archive = new ZipArchive;
         $this->assertTrue($archive->open($path) === true);
         $this->assertNotFalse($archive->locateName('00_INFORMACION/RESUMEN_EXPEDIENTE.txt'));
+        $this->assertNotFalse($archive->locateName('01_DOCUMENTACION_SUBIDA/'));
+        $this->assertNotFalse($archive->locateName('02_EVALUACION/SIN_EVALUACION.txt'));
+        $this->assertNotFalse($archive->locateName('03_CARTA_DESIGNACION/'));
+        $this->assertNotFalse($archive->locateName('05_SEGUIMIENTO/SIN_ARCHIVOS.txt'));
+        $archive->close();
+        unlink($path);
+    }
+
+    public function test_expedient_includes_evaluation_letter_and_all_followup_files(): void
+    {
+        Storage::fake('local');
+        $this->be(LegacyUser::findOrFail(18));
+        $trackingId = DB::table('ccyf_seguimientos')->insertGetId([
+            'origen' => 'historico', 'registro_id' => 81, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        foreach (range(1, 5) as $number) {
+            $path = 'seguimientos/historico/81/archivo_'.$number.'.pdf';
+            Storage::disk('local')->put($path, '%PDF-1.4 seguimiento '.$number);
+            DB::table('ccyf_seguimiento_archivos')->insert([
+                'seguimiento_id' => $trackingId, 'numero' => $number, 'origen' => 'local',
+                'ruta' => $path, 'nombre' => 'archivo_'.$number.'.pdf', 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        Storage::disk('local')->put('reportes/permisionario_designado/Carta_Designacion_81.pdf', '%PDF-1.4 carta');
+        config()->set('ccyf.legacy_reports_root', Storage::disk('local')->path('reportes'));
+        $source = (object) ['result' => 1, 'evaluator_id' => 18, 'evaluated_at' => now()];
+        $evaluation = \Mockery::mock(FinalEvaluationReport::class);
+        $evaluation->shouldReceive('source')->once()->with('historico', 81, 'cafeteria')->andReturn($source);
+        $evaluation->shouldReceive('pdf')->once()->andReturn(response('%PDF-1.4 evaluacion'));
+        $this->app->instance(FinalEvaluationReport::class, $evaluation);
+        $prevaluations = \Mockery::mock(PrevaluationRecords::class);
+        $prevaluations->shouldReceive('detail')->once()->andReturn([]);
+        $this->app->instance(PrevaluationRecords::class, $prevaluations);
+
+        $result = $this->get('/seguimiento-permisionarios/historico-81/expediente?descarga=test-token-123456789');
+        $result->assertOk()->assertDownload()->assertCookie('ccyf_expediente_descarga_test-token-123456789', 'ready');
+        $path = $result->baseResponse->getFile()->getPathname();
+        $archive = new ZipArchive;
+        $this->assertTrue($archive->open($path) === true);
+        $this->assertSame('%PDF-1.4 evaluacion', $archive->getFromName('02_EVALUACION/EVALUACION_DOC_81.pdf'));
+        $this->assertSame('%PDF-1.4 carta', $archive->getFromName('03_CARTA_DESIGNACION/Carta_Designacion_81.pdf'));
+        foreach (range(1, 5) as $number) {
+            $this->assertSame('%PDF-1.4 seguimiento '.$number, $archive->getFromName('05_SEGUIMIENTO/archivo_'.$number.'.pdf'));
+        }
         $archive->close();
         unlink($path);
     }

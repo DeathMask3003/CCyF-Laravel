@@ -31,7 +31,7 @@ return new class extends Migration
             $table->decimal('garantia', 11, 2)->nullable();
             $table->date('fecha_inicio');
             $table->timestamps();
-            $table->unique(['documento_id', 'plantel_id']);
+            $table->unique(['documento_id', 'plantel_id'], 'ccyf_doc_plantel_unique');
         });
     }
 

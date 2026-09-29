@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\CcyfPermissions;
+use App\Support\LegacyTimestamps;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -33,7 +34,7 @@ class ImportCcyfIdentity extends Command
                 DB::table('ccyf_roles')->insert([
                     'rol_id' => $role->rol_id, 'legacy_rol_id' => $role->rol_id,
                     'rol_nom' => $role->rol_nom, 'est' => (bool) $role->est,
-                    'created_at' => $role->fech_crea ?: now(), 'updated_at' => $role->fech_modif ?: now(),
+                    ...LegacyTimestamps::from($role),
                 ]);
             }
             foreach ($grants->groupBy(fn ($grant) => $grant->rol_id.':'.$grant->men_nom) as $entries) {
@@ -53,7 +54,7 @@ class ImportCcyfIdentity extends Command
                     'usu_correo' => $user->usu_correo, 'usu_pass' => $user->usu_pass,
                     'rol_id' => $user->rol_id, 'area_id' => $user->area_id,
                     'usu_telf' => $user->usu_telf, 'est' => (bool) $user->est,
-                    'created_at' => $user->fech_crea ?: now(), 'updated_at' => $user->fech_modif ?: now(),
+                    ...LegacyTimestamps::from($user),
                 ])->all());
             }
         });

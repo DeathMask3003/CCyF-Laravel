@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Services\ConvocationDocuments;
 use App\Services\CcyfStructure;
 use App\Services\LegacyMenu;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -71,6 +74,7 @@ class ConvocationDocumentController extends Controller
                 'convocatoria_id' => $call->id,
                 'titulo' => $data['titulo'], 'detalles_html' => $data['detalles_html'],
                 'font_family' => $data['font_family'], 'font_size' => $data['font_size'],
+                'firmante_nombre' => $data['firmante_nombre'],
                 'creado_por' => $request->user()->getKey(), 'actualizado_por' => $request->user()->getKey(),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
@@ -105,6 +109,7 @@ class ConvocationDocumentController extends Controller
             DB::table('ccyf_convocatoria_documentos')->where('id', $record->id)->update([
                 'titulo' => $data['titulo'], 'detalles_html' => $data['detalles_html'],
                 'font_family' => $data['font_family'], 'font_size' => $data['font_size'],
+                'firmante_nombre' => $data['firmante_nombre'],
                 'actualizado_por' => $request->user()->getKey(), 'updated_at' => now(),
             ]);
             DB::table('ccyf_convocatoria_documento_planteles')->where('documento_id', $record->id)->delete();
@@ -118,7 +123,39 @@ class ConvocationDocumentController extends Controller
         $this->authorizeModule($request, $menu);
         [$call, $data, $campuses] = $this->validatedDocument($request, $documents, true, null, true);
         return $this->pdfResponse($documents->pdf($call, $data['titulo'], $data['detalles_html'], $campuses,
-            $data['font_family'], (float) $data['font_size']), false, 'vista-previa-convocatoria.pdf');
+            $data['font_family'], (float) $data['font_size'], $data['firmante_nombre'], true), false, 'vista-previa-convocatoria.pdf');
+    }
+
+    public function uploadImage(Request $request, LegacyMenu $menu): JsonResponse
+    {
+        $this->authorizeModule($request, $menu);
+        $data = $request->validate([
+            'image' => ['required', 'file', 'image', 'mimetypes:image/png,image/jpeg', 'max:2048',
+                'dimensions:max_width=2400,max_height=2400'],
+        ]);
+        $file = $data['image'];
+        $extension = $file->getMimeType() === 'image/png' ? 'png' : 'jpg';
+        $name = Str::uuid().'.'.$extension;
+        $path = $file->storeAs('ccyf/convocatorias/imagenes', $name, 'local');
+        abort_unless($path, 500, 'No fue posible guardar la imagen.');
+        [$width, $height] = getimagesize($file->getRealPath());
+
+        return response()->json([
+            'url' => route('emision.image', ['image' => $name], false),
+            'width' => $width === $height ? 180 : min(480, max(180, (int) round($width / 2))),
+        ], 201);
+    }
+
+    public function image(string $image, Request $request, LegacyMenu $menu, ConvocationDocuments $documents): Response
+    {
+        $this->authorizeModule($request, $menu);
+        $path = $documents->imagePath('/emision-convocatorias/imagenes/'.$image);
+        abort_unless($path && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, null, [
+            'Content-Type' => str_ends_with($path, '.png') ? 'image/png' : 'image/jpeg',
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
     }
 
     public function pdf(int $document, Request $request, LegacyMenu $menu, ConvocationDocuments $documents): Response
@@ -130,7 +167,8 @@ class ConvocationDocumentController extends Controller
             ->where('documento_id', $document)->orderBy('nombre')->get();
         $download = $request->boolean('descargar');
         return $this->pdfResponse($documents->pdf($call, $record->titulo, $record->detalles_html, $campuses,
-            $record->font_family, (float) $record->font_size),
+            $record->font_family, (float) $record->font_size,
+            $record->firmante_nombre ?: 'NOMBRE DEL FIRMANTE PENDIENTE DE CAPTURA'),
             $download, 'convocatoria-'.$document.'.pdf');
     }
 
@@ -179,6 +217,7 @@ class ConvocationDocumentController extends Controller
             'convocatoria_id' => ['required', 'integer', Rule::exists('ccyf_convocatorias', 'id')],
             'titulo' => ['required', 'string', 'max:200'],
             'detalles_html' => ['required', 'string', 'max:100000'],
+            'firmante_nombre' => [$preview ? 'nullable' : 'required', 'string', 'max:180'],
             'font_family' => ['required', Rule::in(array_keys(ConvocationDocuments::FONT_FAMILIES))],
             'font_size' => ['required', 'numeric', 'between:7,14', 'multiple_of:0.5'],
             'planteles' => ['required', 'array'],
@@ -202,11 +241,11 @@ class ConvocationDocumentController extends Controller
             }
             $validated = validator($row, [
                 'direccion' => ['nullable', 'string', 'max:500'],
-                'espacio' => ['required', 'string', 'max:100'],
+                'espacio' => [$preview ? 'nullable' : 'required', 'string', 'max:100'],
                 'matricula' => ['nullable', 'integer', 'between:0,999999'],
-                'monto' => ['required', 'numeric', 'between:0,999999999.99', 'decimal:0,2'],
+                'monto' => [$preview ? 'nullable' : 'required', 'numeric', 'between:0,999999999.99', 'decimal:0,2'],
                 'garantia' => ['nullable', 'numeric', 'between:0,999999999.99', 'decimal:0,2'],
-                'fecha_inicio' => ['required', 'date_format:Y-m-d'],
+                'fecha_inicio' => [$preview ? 'nullable' : 'required', 'date_format:Y-m-d'],
             ], [
                 'espacio.required' => 'Captura el espacio de '.$campus->nombre.'.',
                 'monto.required' => 'Captura el monto mensual de '.$campus->nombre.'.',
@@ -217,9 +256,10 @@ class ConvocationDocumentController extends Controller
                 'legacy_area_id' => $campus->id, 'nombre' => $campus->nombre,
                 'correo' => $campus->correo,
                 'direccion' => trim($validated['direccion'] ?? '') ?: null,
-                'espacio' => trim($validated['espacio']), 'matricula' => $validated['matricula'] ?? null,
-                'monto' => $validated['monto'], 'garantia' => $validated['garantia'] ?? null,
-                'fecha_inicio' => $validated['fecha_inicio'],
+                'espacio' => trim((string) ($validated['espacio'] ?? '')) ?: null,
+                'matricula' => $validated['matricula'] ?? null,
+                'monto' => $validated['monto'] ?? null, 'garantia' => $validated['garantia'] ?? null,
+                'fecha_inicio' => $validated['fecha_inicio'] ?? null,
             ]);
         }
         if ($selected->isEmpty()) {
@@ -230,6 +270,8 @@ class ConvocationDocumentController extends Controller
             throw ValidationException::withMessages(['detalles_html' => 'Escribe los requisitos y las bases de la convocatoria.']);
         }
         $data['titulo'] = trim($data['titulo']);
+        $data['firmante_nombre'] = trim((string) ($data['firmante_nombre'] ?? ''))
+            ?: 'NOMBRE DEL FIRMANTE PENDIENTE DE CAPTURA';
         $data['detalles_html'] = $details;
         return [$call, $data, $selected];
     }

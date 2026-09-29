@@ -1,0 +1,53 @@
+/* A dedicated navigation row keeps long menus and account names inside the page. */
+.header-inner{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:20px;row-gap:4px;align-items:center;max-width:1440px;min-height:0;padding:13px clamp(18px,3vw,40px) 10px}
+.site-brand{grid-column:1;grid-row:1;min-width:0;max-width:100%}
+.site-brand span{min-width:0}.site-brand small{max-width:min(290px,32vw)}
+.header-account{grid-column:2;grid-row:1;justify-self:end;margin-left:0;min-width:0;gap:0}
+.header-caption{grid-column:2;grid-row:1}
+.main-nav{grid-column:1/-1;grid-row:2;display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:3px;width:100%;min-width:0;overflow:visible;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.13)}
+.main-nav>a,.main-nav>.nav-dropdown>summary{display:inline-flex;align-items:center;min-height:38px;padding:8px 13px;font-size:.83rem;font-weight:650;line-height:1.2;border-radius:9px}
+.main-nav>a:focus-visible,.main-nav summary:focus-visible,.account-dropdown summary:focus-visible,.header-menu-toggle:focus-visible{outline:2px solid #f2d49c;outline-offset:2px}
+.main-nav .nav-dropdown-menu{top:calc(100% + 5px)}
+.header-menu-toggle{display:none}
+.account-dropdown{max-width:270px}
+.account-dropdown summary{display:flex;align-items:center;gap:9px;max-width:270px;min-height:39px;padding:5px 10px;border:1px solid rgba(255,255,255,.17);border-radius:10px;background:rgba(255,255,255,.08)}
+.account-avatar{display:grid;place-items:center;flex:none;width:27px;height:27px;border-radius:8px;background:#e8caa3;color:#5c1836;font-size:.8rem;font-weight:800}
+.account-dropdown summary .account-name{min-width:0;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:#fff}
+.account-dropdown summary .account-chevron{flex:none;margin-left:auto;color:#efd5df}
+.account-dropdown[open] summary .account-avatar,.account-dropdown[open] summary .account-name{transform:none}
+.account-dropdown[open] summary .account-chevron{transform:rotate(180deg)}
+.account-dropdown .nav-dropdown-menu{left:auto;right:0;min-width:205px}
+.account-dropdown .nav-dropdown-menu a,.account-dropdown .nav-dropdown-menu a:hover{text-decoration:none}
+.account-dropdown .nav-dropdown-menu form{border-top:1px solid #eee5e9;margin-top:4px;padding-top:4px}
+.account-signout{display:block;width:100%;min-height:39px;border:0;border-radius:8px;padding:9px 12px;background:transparent;color:#822747;text-align:left;font-size:.84rem;font-weight:700;cursor:pointer}
+.account-signout:hover,.account-signout:focus-visible{background:#f7edf1}
+@media(max-width:1100px){
+  .header-inner{grid-template-columns:minmax(0,1fr) auto auto;column-gap:10px;row-gap:0}
+  .header-account{grid-column:2;grid-row:1}
+  .header-caption{grid-column:2;grid-row:1}
+  .header-menu-toggle{grid-column:3;grid-row:1;display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:39px;padding:7px 12px;border:1px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(255,255,255,.09);color:#fff;font-size:.82rem;font-weight:700;cursor:pointer}
+  .header-menu-toggle:hover,.header-menu-toggle[aria-expanded=true]{background:rgba(255,255,255,.18)}
+  .header-menu-icon{display:grid;gap:4px}.header-menu-icon i{display:block;width:17px;height:2px;border-radius:2px;background:currentColor}
+  .main-nav{display:none;grid-column:1/-1;grid-row:2;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:5px 8px;overflow:visible;margin-top:12px;padding:12px 0 3px}
+  .main-nav.is-open{display:grid}
+  .main-nav>a,.main-nav>.nav-dropdown{width:100%;min-width:0}
+  .main-nav>a,.main-nav>.nav-dropdown>summary{justify-content:space-between;width:100%;min-height:42px;padding:10px 12px;font-size:.84rem}
+  .main-nav .nav-dropdown-menu{position:static;left:auto;right:auto;top:auto;width:100%;min-width:0;margin:4px 0 8px;padding:5px;border-color:rgba(255,255,255,.16);box-shadow:none}
+  .main-nav .nav-dropdown-menu a{white-space:normal;line-height:1.35}
+}
+@media(max-width:700px){
+  .header-inner{padding:10px 16px}
+  .main-nav{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .account-dropdown summary{max-width:155px}
+  .account-dropdown summary .account-name{max-width:95px}
+  .account-dropdown .nav-dropdown-menu{position:absolute;left:auto;right:0;top:calc(100% + 5px);min-width:205px;margin:0}
+  .site-brand small{max-width:165px}
+}
+@media(max-width:540px){
+  .header-inner{column-gap:7px}
+  .site-brand{gap:8px}.site-brand img{width:38px;height:38px}.site-brand strong{font-size:1.08rem}.site-brand small{display:none}
+  .account-dropdown summary{width:38px;max-width:38px;height:38px;padding:4px;border-radius:10px}
+  .account-avatar{width:28px;height:28px}.account-dropdown summary .account-name,.account-dropdown summary .account-chevron{display:none}
+  .header-menu-toggle{width:39px;height:38px;padding:0}.header-menu-toggle>span:last-child{display:none}
+  .main-nav{grid-template-columns:1fr}
+}

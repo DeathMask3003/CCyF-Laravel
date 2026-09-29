@@ -85,10 +85,11 @@ class FinalEvaluationReport
         $pdf->SetHTMLFooter('<div style="border-top:1px solid #bdc3c7;padding-top:5px;color:#666;font-size:7pt;text-align:center">Página {PAGENO}/{nbpg}</div>');
         $pdf->WriteHTML($html);
         if ($signers) {
-            if ($pdf->PageNo() === 1) {
+            $compact = $record->servicio === 'fotocopiado';
+            if (! $compact && $pdf->PageNo() === 1) {
                 $pdf->AddPage();
             }
-            $pdf->WriteHTML(view('revision.final-evaluation-signatures', compact('signers'))->render());
+            $pdf->WriteHTML(view('revision.final-evaluation-signatures', compact('signers', 'compact'))->render());
         }
         $bytes = $pdf->Output('', Destination::STRING_RETURN);
 

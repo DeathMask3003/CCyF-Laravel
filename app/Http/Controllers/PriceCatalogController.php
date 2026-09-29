@@ -38,9 +38,10 @@ class PriceCatalogController extends Controller
             ->first(['ccyf_catalogos.*', 'servicio.nombre as servicio_nombre']);
         $products = $catalog ? DB::table('ccyf_productos')->where('catalogo_id', $catalog->id)
             ->orderBy('orden')->orderBy('id')->get() : collect();
+        $catalogVersion = $catalog ? $this->catalogVersion($products) : null;
         $service = DB::table('ccyf_tipos_servicio')->where('id', $legacy->servicio_id)->first();
 
-        return view('catalogos.show', compact('legacy', 'catalog', 'products', 'service'));
+        return view('catalogos.show', compact('legacy', 'catalog', 'products', 'service', 'catalogVersion'));
     }
 
     public function prepare(int $category, Request $request, LegacyMenu $menu, PriceCatalogs $catalogs): RedirectResponse
@@ -97,6 +98,65 @@ class PriceCatalogController extends Controller
         ]);
 
         return back()->with('status', 'Producto actualizado.');
+    }
+
+    public function updateProducts(int $category, Request $request, LegacyMenu $menu): RedirectResponse
+    {
+        $this->authorizeCatalog($request, $menu);
+        $catalog = $this->catalog($category);
+        $data = $request->validate([
+            'version' => ['required', 'string', 'size:64'],
+            'products' => ['required', 'array', 'min:1'],
+            'products.*.nombre' => ['required', 'string', 'max:120'],
+            'products.*.unidad' => ['nullable', 'string', 'max:40'],
+            'products.*.orden' => ['required', 'integer', 'between:1,999'],
+            'products.*.activo' => ['required', 'boolean'],
+        ]);
+
+        $changed = DB::transaction(function () use ($catalog, $data): int {
+            $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog->id)
+                ->orderBy('id')->lockForUpdate()->get();
+            abort_unless(hash_equals($this->catalogVersion($products), $data['version']), 409,
+                'El catálogo cambió desde que abriste la página. Actualízala antes de guardar.');
+            $expected = $products->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+            $received = collect(array_keys($data['products']))->map(fn ($id) => (int) $id)->sort()->values()->all();
+            abort_unless($expected === $received, 422,
+                'La lista de productos está incompleta. Actualiza la página antes de guardar.');
+
+            $names = collect($data['products'])->map(fn ($row) => mb_strtolower(trim($row['nombre'])));
+            if ($names->unique()->count() !== $products->count()) {
+                throw ValidationException::withMessages(['products' => 'Hay productos con el mismo nombre en esta convocatoria.']);
+            }
+
+            $changed = 0;
+            foreach ($products as $product) {
+                $row = $data['products'][$product->id];
+                $values = [
+                    'nombre' => trim($row['nombre']),
+                    'unidad' => trim($row['unidad'] ?? '') ?: null,
+                    'orden' => (int) $row['orden'],
+                    'activo' => (bool) $row['activo'],
+                ];
+                if ($product->nombre === $values['nombre'] && $product->unidad === $values['unidad']
+                    && (int) $product->orden === $values['orden'] && (bool) $product->activo === $values['activo']) {
+                    continue;
+                }
+                DB::table('ccyf_productos')->where('id', $product->id)->update($values + ['updated_at' => now()]);
+                $changed++;
+            }
+            return $changed;
+        });
+
+        return redirect()->route('catalogos.show', $category)
+            ->with('status', $changed ? "Se guardaron {$changed} productos." : 'No había cambios pendientes.');
+    }
+
+    private function catalogVersion($products): string
+    {
+        return hash('sha256', $products->sortBy('id')->values()->map(fn ($product) => [
+            (int) $product->id, $product->nombre, $product->unidad,
+            (int) $product->orden, (bool) $product->activo,
+        ])->toJson());
     }
 
     private function catalog(int $category): object

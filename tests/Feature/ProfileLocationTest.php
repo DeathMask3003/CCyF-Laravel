@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\LegacyUser;
 use App\Services\MexicanPhone;
+use App\Services\ProfilePhotos;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -99,6 +100,115 @@ class ProfileLocationTest extends TestCase
         $this->get('/mi-perfil')->assertOk()->assertSee('Coordenadas registradas');
         $this->be(LegacyUser::findOrFail(2));
         $this->get('/ubicaciones')->assertOk()->assertDontSee('19.285000');
+    }
+
+    public function test_profile_photo_is_private_and_can_be_replaced(): void
+    {
+        Storage::fake('local');
+        $this->be(LegacyUser::findOrFail(1));
+        $this->get('/mi-perfil/foto')->assertNotFound();
+        $this->post('/mi-perfil/foto', ['foto' => UploadedFile::fake()->image('retrato.jpg', 800, 600)])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $path = Storage::disk('local')->path('profile-photos/1.png');
+        $this->assertFileExists($path);
+        $this->assertSame([420, 420], array_slice(getimagesize($path), 0, 2));
+        $this->post('/mi-perfil/foto', ['foto' => UploadedFile::fake()->image('nuevo.png', 600, 800)])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertFileExists($path);
+        $this->get('/mi-perfil/foto')->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get('/mi-perfil')->assertSee('/mi-perfil/foto', false);
+        $this->post('/mi-perfil/foto', ['foto' => UploadedFile::fake()->create('archivo.php', 1)])
+            ->assertSessionHasErrors('foto');
+        $this->assertFileExists($path);
+    }
+
+    public function test_sat_signature_validates_files_and_physically_deletes_local_and_legacy_copies(): void
+    {
+        Storage::fake('local');
+        config()->set('database.connections.legacy', ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
+        DB::purge('legacy');
+        DB::table('ccyf_roles')->insert([
+            ['rol_id' => 18, 'rol_nom' => 'Administrador', 'est' => 1],
+            ['rol_id' => 1, 'rol_nom' => 'Concursante', 'est' => 1],
+        ]);
+        Schema::connection('legacy')->create('tm_efirmas', function (Blueprint $table): void {
+            $table->integer('usu_id')->primary();
+            foreach (['alias', 'cer_path', 'key_path', 'serial_cert', 'valid_from', 'valid_to', 'method'] as $column) {
+                $table->string($column)->nullable();
+            }
+        });
+        DB::table('ccyf_usuarios')->where('usu_id', 1)->update(['legacy_usu_id' => 77]);
+        $legacyRoot = Storage::disk('local')->path('original-e-signs');
+        $legacySecure = $legacyRoot.DIRECTORY_SEPARATOR.'users'.DIRECTORY_SEPARATOR.'77'.DIRECTORY_SEPARATOR.'secure';
+        mkdir($legacySecure, 0700, true);
+        config()->set('ccyf.legacy_signatures_root', $legacyRoot);
+        $opensslConfig = Storage::disk('local')->path('openssl-test.cnf');
+        file_put_contents($opensslConfig, "[ req ]\ndefault_bits = 2048\ndistinguished_name = dn\nprompt = no\n[ dn ]\nCN = Prueba\n");
+        $config = ['config' => $opensslConfig, 'private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA];
+        $private = openssl_pkey_new($config);
+        $csr = openssl_csr_new(['commonName' => 'Firmante de prueba'], $private, $config);
+        $cert = openssl_csr_sign($csr, null, $private, 365, $config);
+        $this->assertTrue(openssl_x509_export($cert, $certPem));
+        $this->assertTrue(openssl_pkey_export($private, $keyPem, 'ClaveSAT123', $config));
+        file_put_contents($legacySecure.DIRECTORY_SEPARATOR.'certificado.pem', $certPem);
+        file_put_contents($legacySecure.DIRECTORY_SEPARATOR.'clave.pem', $keyPem);
+        DB::connection('legacy')->table('tm_efirmas')->insert(['usu_id' => 77, 'alias' => 'SAT original',
+            'cer_path' => $legacySecure.DIRECTORY_SEPARATOR.'certificado.pem',
+            'key_path' => $legacySecure.DIRECTORY_SEPARATOR.'clave.pem', 'method' => 'efirma']);
+
+        $this->be(LegacyUser::findOrFail(1));
+        $this->get('/mi-perfil')->assertOk()->assertSee('SAT original');
+        $this->post('/mi-perfil/efirma', ['cer' => $this->satUpload('certificado.cer', $certPem),
+            'key' => $this->satUpload('clave.key', $keyPem), 'password_sat' => 'Incorrecta'])
+            ->assertSessionHasErrors('key');
+        $this->post('/mi-perfil/efirma', ['cer' => $this->satUpload('certificado.cer', $certPem),
+            'key' => $this->satUpload('clave.key', $keyPem), 'password_sat' => 'ClaveSAT123', 'alias' => 'SAT nuevo'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $localFolder = Storage::disk('local')->path('sat-signatures/users/1');
+        $this->assertCount(2, glob($localFolder.DIRECTORY_SEPARATOR.'*.pem'));
+        $this->get('/mi-perfil')->assertSee('SAT nuevo');
+        $this->post('/mi-perfil/efirma', ['cer' => $this->satUpload('certificado.cer', $certPem),
+            'key' => $this->satUpload('clave.key', $keyPem), 'password_sat' => 'ClaveSAT123', 'alias' => 'SAT reemplazado'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertCount(2, glob($localFolder.DIRECTORY_SEPARATOR.'*.pem'));
+        $this->delete('/mi-perfil/efirma')->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame([], glob($localFolder.DIRECTORY_SEPARATOR.'*.pem'));
+        $this->assertFileDoesNotExist($legacySecure.DIRECTORY_SEPARATOR.'certificado.pem');
+        $this->assertFileDoesNotExist($legacySecure.DIRECTORY_SEPARATOR.'clave.pem');
+        $this->assertDatabaseHas('tm_efirmas', ['usu_id' => 77, 'cer_path' => null, 'key_path' => null], 'legacy');
+        $this->get('/mi-perfil')->assertDontSee('SAT nuevo');
+
+        $this->be(LegacyUser::findOrFail(2));
+        $this->get('/mi-perfil')->assertDontSee('e.firma del SAT');
+        $this->post('/mi-perfil/efirma', [])->assertForbidden();
+        $this->delete('/mi-perfil/efirma')->assertForbidden();
+    }
+
+    public function test_profile_photo_uses_existing_legacy_image_when_no_new_photo_was_uploaded(): void
+    {
+        Storage::fake('local');
+        config()->set('database.connections.legacy', ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
+        DB::purge('legacy');
+        Schema::connection('legacy')->create('tm_usuario', function (Blueprint $table): void {
+            $table->integer('usu_id')->primary();
+            $table->string('usu_img')->nullable();
+        });
+        DB::table('ccyf_usuarios')->where('usu_id', 1)->update(['legacy_usu_id' => 77]);
+        DB::connection('legacy')->table('tm_usuario')->insert(['usu_id' => 77, 'usu_img' => 'foto-prueba.png']);
+        $folder = Storage::disk('local')->path('legacy-images');
+        mkdir($folder, 0700, true);
+        config()->set('ccyf.legacy_profile_photos_root', $folder);
+        $path = $folder.DIRECTORY_SEPARATOR.'foto-prueba.png';
+        $image = UploadedFile::fake()->image('original.png', 200, 200);
+        copy($image->getRealPath(), $path);
+        $this->assertSame(realpath($path), app(ProfilePhotos::class)->pathFor(LegacyUser::findOrFail(1)));
+    }
+
+    private function satUpload(string $name, string $contents): UploadedFile
+    {
+        $path = Storage::disk('local')->path('sat-test-'.uniqid());
+        file_put_contents($path, $contents);
+        return new UploadedFile($path, $name, null, null, true);
     }
 
     public function test_historical_profile_and_locations_import_once_without_replacing_edits(): void

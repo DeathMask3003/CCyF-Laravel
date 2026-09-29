@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Services\LegacyMenu;
 use App\Services\RegistrationRequirements;
+use App\Services\TurnstileVerification;
+use App\Rules\PdfDocument;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -96,7 +99,7 @@ class NewOfficeController extends Controller
         return back()->with('status', 'Borrador guardado. Puedes continuar y enviar el registro cuando tengas todos los PDF.');
     }
 
-    public function submit(int $category, Request $request, LegacyMenu $menu, RegistrationRequirements $requirements): RedirectResponse
+    public function submit(int $category, Request $request, LegacyMenu $menu, RegistrationRequirements $requirements, TurnstileVerification $turnstile): RedirectResponse
     {
         abort_unless($menu->allows($request->user(), 'NuevoOficio'), 403);
         [, $catalog, $products] = $this->context($category);
@@ -106,12 +109,23 @@ class NewOfficeController extends Controller
             'comentarios' => ['required', 'string', 'max:5000'],
             'documentos' => ['required', 'array'],
         ];
+        $attributes = [
+            'tipo_documento_id' => 'tipo de invitación',
+            'plantel_id' => 'plantel',
+            'comentarios' => 'comentarios de la propuesta',
+            'documentos' => 'documentación',
+            'precios' => 'precios',
+            'precios.*' => 'precio de producto',
+        ];
         foreach ($requiredDocuments as $requirement) {
             $rules['documentos.'.$requirement->clave] = [
-                $requirement->requerido ? 'required' : 'nullable', 'file', 'mimes:pdf', 'max:3072',
+                $requirement->requerido ? 'required' : 'nullable', 'file', new PdfDocument($requirement->nombre), 'max:3072',
             ];
+            $attributes['documentos.'.$requirement->clave] = $requirement->nombre;
         }
-        $data = $this->validateCore($request, $category, $products, $rules);
+        $data = $this->validateCore($request, $category, $products, $rules, $attributes);
+
+        $turnstile->verify($request, 'submit_registration');
 
         $expectedFiles = $requiredDocuments->pluck('clave')->sort()->values()->all();
         $receivedFiles = array_keys($request->file('documentos', []));
@@ -164,7 +178,7 @@ class NewOfficeController extends Controller
                     DB::table('ccyf_registro_archivos')->insert([
                         'registro_id' => $id, 'requisito_id' => $requirement->id,
                         'nombre_original' => $file->getClientOriginalName(), 'ruta' => $path,
-                        'mime' => $file->getMimeType() ?: 'application/pdf', 'bytes' => $file->getSize(),
+                        'mime' => 'application/pdf', 'bytes' => $file->getSize(),
                         'created_at' => $now, 'updated_at' => $now,
                     ]);
                 }
@@ -180,6 +194,14 @@ class NewOfficeController extends Controller
         } catch (Throwable $exception) {
             if ($recordId) {
                 Storage::disk('local')->deleteDirectory('ccyf/registros/'.$recordId);
+            }
+            if ($exception instanceof UniqueConstraintViolationException && DB::table('ccyf_registros')->where([
+                'usu_id' => $request->user()->getKey(), 'convocatoria_id' => $category,
+                'plantel_id' => $data['plantel_id'], 'servicio_id' => $catalog->servicio_id,
+            ])->exists()) {
+                throw ValidationException::withMessages([
+                    'plantel_id' => 'Ya enviaste un registro para este plantel, convocatoria y servicio.',
+                ]);
             }
             throw $exception;
         }
@@ -204,7 +226,7 @@ class NewOfficeController extends Controller
         return view('oficios.receipt', compact('registration', 'files'));
     }
 
-    private function validateCore(Request $request, int $category, $products, array $extra = []): array
+    private function validateCore(Request $request, int $category, $products, array $extra = [], array $attributes = []): array
     {
         abort_if($products->isEmpty(), 422, 'Esta convocatoria no tiene productos activos.');
         $data = Validator::make($request->all(), [
@@ -212,7 +234,7 @@ class NewOfficeController extends Controller
             'plantel_id' => ['required', 'integer', Rule::exists('ccyf_planteles', 'id')->where('activo', true)],
             'precios' => ['required', 'array'],
             'precios.*' => ['required', 'numeric', 'between:0,99999999.99', 'decimal:0,2'],
-        ] + $extra)->validate();
+        ] + $extra, [], $attributes)->validate();
         $assigned = DB::table('ccyf_convocatoria_planteles')->where('convocatoria_id', $category)
             ->where('plantel_id', $data['plantel_id'])->exists();
         if (! $assigned) {

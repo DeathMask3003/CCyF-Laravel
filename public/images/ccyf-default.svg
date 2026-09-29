@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-labelledby="title">
+  <title id="title">CCyF</title>
+  <rect width="160" height="160" rx="36" fill="#651b3a"/>
+  <path d="M129 25c-14-10-29-15-48-15-39 0-68 30-68 70s29 70 68 70c19 0 34-5 48-15" fill="none" stroke="#d7b27a" stroke-width="5" opacity=".75"/>
+  <text x="80" y="78" text-anchor="middle" fill="#fff" font-family="Georgia,serif" font-size="48" font-weight="bold">CC</text>
+  <path d="M43 92h74" stroke="#d7b27a" stroke-width="2"/>
+  <text x="80" y="121" text-anchor="middle" fill="#f3d8ab" font-family="Arial,sans-serif" font-size="28" font-weight="bold" letter-spacing="2">yF</text>
+</svg>

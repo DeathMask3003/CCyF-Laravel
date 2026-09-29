@@ -1,0 +1,16 @@
+.catalog-bulk-form{margin-bottom:20px}
+.catalog-bulk-form .panel{margin-bottom:0;border-radius:18px 18px 0 0;border-bottom:0}
+.catalog-bulk-form .product-table{min-width:700px}
+.catalog-bulk-form .product-table th:nth-child(1){width:40%}
+.catalog-bulk-form .product-table th:nth-child(2){width:25%}
+.catalog-bulk-form .product-table th:nth-child(3){width:15%}
+.catalog-bulk-form .product-table th:nth-child(4){width:20%}
+.catalog-bulk-form .product-row{grid-template-columns:minmax(0,2fr) minmax(0,1.25fr) minmax(85px,.55fr) minmax(95px,.65fr)}
+.catalog-bulk-form .catalog-row-changed{background:#fff9ed}
+.catalog-save-bar{position:sticky;bottom:0;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:17px clamp(20px,2.6vw,30px);border:1px solid #e7e0e0;border-top-color:#eadde2;border-radius:0 0 18px 18px;background:rgba(255,255,255,.98);box-shadow:0 10px 28px rgba(57,35,41,.08)}
+.catalog-save-bar p{margin:0}
+.catalog-save-bar strong,.catalog-save-bar span{display:block}
+.catalog-save-bar strong{color:#611232;font-size:.88rem}
+.catalog-save-bar span{margin-top:4px;color:#75686f;font-size:.79rem;line-height:1.4}
+.catalog-save-bar .button{flex:none;white-space:nowrap}
+@media(max-width:700px){.catalog-save-bar{align-items:stretch;flex-direction:column;padding:15px 18px}.catalog-save-bar .button{width:100%}}

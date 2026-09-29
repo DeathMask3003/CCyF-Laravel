@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use App\Support\LegacyTimestamps;
 
 class ImportCcyfTracking extends Command
 {
@@ -41,12 +42,12 @@ class ImportCcyfTracking extends Command
                 'legacy_detapermi_id' => $row->detapermi_id,
                 'metros_cuadrados' => $row->metros_cuadrados,
                 'matricula' => $row->matricula, 'monto' => $row->monto,
-                'convocatoria1' => $row->convocatoria1 ?: null,
-                'convocatoria2' => $row->convocatoria2 ?: null,
-                'convocatoria3' => $row->convocatoria3 ?: null,
+                'convocatoria1' => LegacyTimestamps::date($row->convocatoria1),
+                'convocatoria2' => LegacyTimestamps::date($row->convocatoria2),
+                'convocatoria3' => LegacyTimestamps::date($row->convocatoria3),
                 'pagosalmes' => $row->pagosalmes, 'construidapor' => $row->construidapor,
                 'servicioenergia' => $row->servicioenergia, 'observaciones' => $row->observaciones,
-                'created_at' => $row->fech_crea ?: now(), 'updated_at' => $row->fech_modif ?: now(),
+                ...LegacyTimestamps::from($row),
             ]);
             $files = $legacy->table('td_archivos_permisio')->where('detapermi_id', $row->detapermi_id)
                 ->where('est', 1)->orderByDesc('fech_crea')->orderByDesc('archivo_id')->first();

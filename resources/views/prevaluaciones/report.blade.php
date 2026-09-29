@@ -22,6 +22,14 @@
     .signature { text-align: center; padding-top: 38px; }
     .signature-line { border-top: 1px solid #777; width: 48%; margin: auto; padding-top: 4px; }
     .note { color: #675e62; font-size: 7pt; text-align: center; margin-top: 10px; }
+    @if($record->servicio === 'fotocopiado')
+    h2 { padding: 5px; margin-top: 8px; }
+    th, td { padding: 4px 5px; }
+    .counts { margin: 4px 0; padding: 4px; }
+    .result { padding: 6px; }
+    .signature { padding-top: 22px; }
+    .note { margin-top: 5px; }
+    @endif
 </style>
 <h1>REPORTE DE PREVALUACIÓN DE DOCUMENTACIÓN Y PRECIOS</h1>
 <div class="subtitle">SERVICIO DE {{ $label }}</div>
@@ -46,6 +54,9 @@
 </table>
 
 <h2>EVALUACIÓN DE PRECIOS DE {{ $record->servicio === 'cafeteria' ? 'ALIMENTOS' : 'FOTOCOPIADO' }}</h2>
+@if ($record->servicio === 'cafeteria')
+    @include('prevaluaciones.price-columns', ['prices' => $detail['prices'], 'items' => $detail['items'], 'rating' => $state])
+@else
 <table>
     <thead><tr><th width="5%">N.º</th><th width="32%">{{ $record->servicio === 'cafeteria' ? 'Alimento' : 'Servicio' }}</th><th width="13%">Precio</th><th width="15%">Estado</th><th width="35%">Observaciones</th></tr></thead>
     <tbody>
@@ -57,6 +68,7 @@
     @endforelse
     </tbody>
 </table>
+@endif
 <div class="counts">Precios que cumplen: {{ $priceCounts['CUMPLE'] }} &nbsp; · &nbsp; No cumplen: {{ $priceCounts['NO CUMPLE'] }} &nbsp; · &nbsp; Pendientes: {{ $priceCounts['PENDIENTE'] }}</div>
 
 <h2>RESULTADO DE VIABILIDAD</h2>

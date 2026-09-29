@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Notifications\CcyfResetPassword;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 
 class LegacyUser extends Authenticatable
 {
+    use Notifiable;
+
     protected $connection = 'sqlite';
 
     protected $table = 'ccyf_usuarios';
@@ -16,7 +20,7 @@ class LegacyUser extends Authenticatable
 
     protected $guarded = ['*'];
 
-    protected $hidden = ['usu_pass'];
+    protected $hidden = ['usu_pass', 'remember_token'];
 
     public function getAuthPasswordName(): string
     {
@@ -26,5 +30,20 @@ class LegacyUser extends Authenticatable
     public function getAuthPassword(): string
     {
         return (string) $this->usu_pass;
+    }
+
+    public function getEmailForPasswordReset(): string
+    {
+        return (string) $this->getKey();
+    }
+
+    public function routeNotificationForMail(): ?string
+    {
+        return $this->usu_correo;
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new CcyfResetPassword($token));
     }
 }

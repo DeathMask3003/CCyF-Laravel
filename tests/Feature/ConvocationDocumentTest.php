@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Models\LegacyUser;
 use App\Services\ConvocationDocuments;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ConvocationDocumentTest extends TestCase
@@ -82,7 +84,7 @@ class ConvocationDocumentTest extends TestCase
             'documento_id' => $id, 'plantel_id' => 10, 'monto' => 2400,
         ]);
         $this->assertDatabaseHas('ccyf_convocatoria_documentos', ['id' => $id,
-            'font_family' => 'dejavusans', 'font_size' => 9]);
+            'font_family' => 'dejavusans', 'font_size' => 9, 'firmante_nombre' => 'Mtra. Firmante Ejemplo']);
         $this->assertDatabaseHas('ccyf_plantel_servicios', ['plantel_id' => 10, 'monto' => 2000]);
         $this->assertStringNotContainsString('<script', DB::table('ccyf_convocatoria_documentos')->value('detalles_html'));
         $this->get('/emision-convocatorias')->assertOk()->assertSee('Convocatoria de cafetería');
@@ -108,6 +110,21 @@ class ConvocationDocumentTest extends TestCase
         $invalid['planteles'][99] = $invalid['planteles'][10];
         unset($invalid['planteles'][10]);
         $this->post('/emision-convocatorias', $invalid)->assertSessionHasErrors('planteles');
+        $this->assertDatabaseCount('ccyf_convocatoria_documentos', 0);
+    }
+
+    public function test_draft_preview_opens_with_pending_campus_data_without_relaxing_save(): void
+    {
+        $this->be(LegacyUser::findOrFail(2));
+        $draft = $this->payload([
+            'firmante_nombre' => null,
+            'planteles' => [10 => ['espacio' => null, 'monto' => null, 'fecha_inicio' => null]],
+        ]);
+        $preview = $this->post('/emision-convocatorias/vista-previa', $draft)->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', $preview->getContent());
+        $this->assertDatabaseCount('ccyf_convocatoria_documentos', 0);
+        $this->post('/emision-convocatorias', $draft)->assertSessionHasErrors('firmante_nombre');
         $this->assertDatabaseCount('ccyf_convocatoria_documentos', 0);
     }
 
@@ -165,6 +182,61 @@ class ConvocationDocumentTest extends TestCase
         $this->assertStringNotContainsString('onclick', $clean);
         $this->assertStringNotContainsString('javascript:', $clean);
         $this->assertStringNotContainsString('color:red', $clean);
+        $rich = app(ConvocationDocuments::class)->cleanHtml('<p style="text-align:justify">Texto <span style="font-family:dejavuserif;font-size:11pt;color:red" onclick="evil()">destacado</span></p><table onclick="evil()"><tbody><tr><th>Concepto</th><th>Detalle</th></tr><tr><td>Uno</td><td>Dos</td></tr></tbody></table>');
+        $this->assertStringContainsString('font-family:dejavuserif;font-size:11pt', $rich);
+        $this->assertStringContainsString('<table><tbody><tr><th>Concepto</th><th>Detalle</th>', $rich);
+        $this->assertStringNotContainsString('onclick', $rich);
+        $this->assertStringNotContainsString('color:red', $rich);
+        $this->assertStringNotContainsString('font-family:arial', app(ConvocationDocuments::class)->cleanHtml('<span style="font-family:arial;font-size:80pt">No permitido</span>'));
+    }
+
+    public function test_editor_uploads_a_private_image_and_includes_it_in_preview_and_saved_pdf(): void
+    {
+        Storage::fake('local');
+        $this->be(LegacyUser::findOrFail(1));
+        $this->post('/emision-convocatorias/imagenes', ['image' => UploadedFile::fake()->image('qr.png', 240, 240)])
+            ->assertForbidden();
+        $this->be(LegacyUser::findOrFail(2));
+        $this->post('/emision-convocatorias/imagenes', ['image' => UploadedFile::fake()->create('vector.svg', 5, 'image/svg+xml')])
+            ->assertSessionHasErrors('image');
+        $upload = $this->postJson('/emision-convocatorias/imagenes', [
+            'image' => UploadedFile::fake()->image('qr.png', 240, 240),
+        ])->assertCreated()->assertJsonStructure(['url', 'width']);
+        $url = $upload->json('url');
+        $this->assertSame(180, $upload->json('width'));
+        $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->be(LegacyUser::findOrFail(1));
+        $this->get($url)->assertForbidden();
+        $this->be(LegacyUser::findOrFail(2));
+
+        $details = '<h2>Bases</h2><p>Consulta el código QR para registrar tu propuesta.</p>'
+            .'<p style="text-align:justify"><img src="'.$url.'" width="170" alt="QR de registro" onerror="evil()"></p>';
+        $clean = app(ConvocationDocuments::class)->cleanHtml($details);
+        $this->assertStringContainsString('width="170"', $clean);
+        $this->assertStringNotContainsString('onerror', $clean);
+        $resized = app(ConvocationDocuments::class)->cleanHtml('<p style="text-align:center"><img src="'.$url.'" style="width:220px;height:auto" alt="QR"></p>');
+        $this->assertStringContainsString('width="220"', $resized);
+        $this->assertStringNotContainsString('http://evil', app(ConvocationDocuments::class)->cleanHtml('<img src="http://evil.test/qr.png">'));
+
+        $preview = $this->post('/emision-convocatorias/vista-previa', $this->payload([
+            'detalles_html' => $details,
+        ]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringContainsString('/Subtype /Image', $preview->getContent());
+        $this->post('/emision-convocatorias', $this->payload(['detalles_html' => $details]))->assertRedirect();
+        $this->assertStringContainsString($url, DB::table('ccyf_convocatoria_documentos')->value('detalles_html'));
+        $id = DB::table('ccyf_convocatoria_documentos')->value('id');
+        $this->assertStringContainsString('/Subtype /Image', $this->get('/emision-convocatorias/'.$id.'/pdf')->getContent());
+
+        $templateBody = $details.'<p>'.str_repeat('Bases para la convocatoria de cafetería. ', 4).'</p>';
+        $this->post('/emision-convocatorias/plantillas/cafeteria', [
+            'cuerpo_html' => $templateBody, 'font_family' => 'dejavusans', 'font_size' => 9,
+        ])->assertRedirect();
+        $this->assertStringContainsString($url, DB::table('ccyf_convocatoria_plantillas')->value('cuerpo_html'));
+        $this->get('/emision-convocatorias/nueva?convocatoria=8')->assertOk()->assertSee($url)
+            ->assertSee('vendor/tinymce/tinymce.min.js', false)
+            ->assertSee('data-tiny-base=', false);
+        $this->get('/emision-convocatorias/plantillas/cafeteria')->assertOk()
+            ->assertSee('vendor/tinymce/tinymce.min.js', false);
     }
 
     public function test_service_template_is_editable_and_new_documents_use_its_style(): void
@@ -172,7 +244,8 @@ class ConvocationDocumentTest extends TestCase
         $this->be(LegacyUser::findOrFail(2));
         $this->get('/emision-convocatorias/plantillas/cafeteria')->assertOk()
             ->assertSee('Entrega de la Propuesta')->assertSee('DejaVu Sans')
-            ->assertSee('Centrar texto')->assertSee('Justificar texto');
+            ->assertSee('vendor/tinymce/tinymce.min.js', false)
+            ->assertSee('data-tiny-base=', false);
         $body = '<h2 style="text-align:center">Convocatoria actualizada</h2><p style="text-align:justify">'.str_repeat('Bases editables para cafetería. ', 5).'</p>';
         $this->post('/emision-convocatorias/plantillas/cafeteria', [
             'cuerpo_html' => $body, 'font_family' => 'dejavuserif', 'font_size' => '9.5',
@@ -182,7 +255,7 @@ class ConvocationDocumentTest extends TestCase
         $this->assertStringContainsString('text-align:center', DB::table('ccyf_convocatoria_plantillas')->value('cuerpo_html'));
         $this->get('/emision-convocatorias/nueva?convocatoria=8')->assertOk()
             ->assertSee('Convocatoria actualizada')->assertSee('value="9.5"', false)
-            ->assertSee('Centrar texto')->assertSee('Justificar texto');
+            ->assertSee('vendor/tinymce/tinymce.min.js', false);
         $this->post('/emision-convocatorias', $this->payload([
             'detalles_html' => $body, 'font_family' => 'dejavuserif', 'font_size' => '9.5',
         ]))->assertRedirect();
@@ -196,12 +269,19 @@ class ConvocationDocumentTest extends TestCase
     public function test_full_service_template_can_be_rendered_to_pdf(): void
     {
         $this->be(LegacyUser::findOrFail(2));
+        Storage::fake('local');
         $body = app(ConvocationDocuments::class)->defaultTemplate('Cafetería');
         $this->assertStringContainsString('Entrega de la Propuesta', $body);
+        $upload = $this->postJson('/emision-convocatorias/imagenes', [
+            'image' => UploadedFile::fake()->image('qr.png', 240, 240),
+        ])->assertCreated();
+        $qr = '<p style="text-align:center"><img src="'.$upload->json('url').'" width="180" alt="QR"></p>';
+        $body = substr_replace($body, $qr, strrpos($body, '</td>'), 0);
         $preview = $this->post('/emision-convocatorias/vista-previa', $this->payload([
             'detalles_html' => $body,
         ]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertStringStartsWith('%PDF', $preview->getContent());
+        $this->assertStringContainsString('/Subtype /Image', $preview->getContent());
     }
 
     public function test_annex_precedes_requirements_and_signature_stays_at_end(): void
@@ -213,6 +293,9 @@ class ConvocationDocumentTest extends TestCase
             $this->assertLessThan(mb_strpos($details, 'R E Q U I S I T O S'), mb_strpos($details, 'Anexo I · Planteles participantes'));
             $this->assertLessThan(mb_strpos($details, 'ATENTAMENTE'), mb_strpos($details, 'Plantel Centro'));
             $this->assertStringContainsString('__________________________________', $details);
+            $this->assertStringContainsString('ccyf-signature-table', $details);
+            $this->assertStringContainsString('Mtra. Firmante Ejemplo', $documents->detailsWithAnnex(
+                $documents->defaultTemplate($service), '<p>Anexo</p>', 'Mtra. Firmante Ejemplo'));
         }
     }
 
@@ -221,7 +304,7 @@ class ConvocationDocumentTest extends TestCase
         return array_replace_recursive([
             'convocatoria_id' => 8, 'titulo' => 'Convocatoria de cafetería',
             'detalles_html' => '<h2>Bases</h2><p>Entregar propuesta.<script>alert(1)</script></p>',
-            'font_family' => 'dejavusans', 'font_size' => '9',
+            'font_family' => 'dejavusans', 'font_size' => '9', 'firmante_nombre' => 'Mtra. Firmante Ejemplo',
             'planteles' => [10 => ['seleccionado' => 1, 'direccion' => 'Calle 10', 'espacio' => 'Local 3',
                 'matricula' => 500, 'monto' => '2400.00', 'garantia' => '1000.00', 'fecha_inicio' => '2026-10-01']],
         ], $override);

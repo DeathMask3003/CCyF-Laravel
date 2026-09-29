@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Support\LegacyTimestamps;
 
 class CcyfStructure
 {
@@ -44,8 +45,7 @@ class CcyfStructure
                 'correo' => $row->area_correo,
                 'direccion' => $row->direccion_plantel,
                 'activo' => (bool) $row->est,
-                'created_at' => $row->fech_crea ?: now(),
-                'updated_at' => $row->fech_modif ?: ($row->fech_crea ?: now()),
+                ...LegacyTimestamps::from($row),
             ]);
             $this->importCampusService($row, 3, 'espacio', 'matricula', 'monto', 'garantia');
             $this->importCampusService($row, 4, 'espacio_foto', 'matricula_foto', 'monto_foto', 'garantia_foto');
@@ -93,8 +93,7 @@ class CcyfStructure
                 'numero_clave' => $this->key($row->cat_nom),
                 'servicio_id' => $serviceId,
                 'activo' => (bool) $row->est,
-                'created_at' => $row->fech_crea ?: now(),
-                'updated_at' => $row->fech_modif ?: ($row->fech_crea ?: now()),
+                ...LegacyTimestamps::from($row),
             ]);
             DB::table('ccyf_catalogos')->where('legacy_cat_id', $row->cat_id)->update([
                 'convocatoria_id' => $row->cat_id,

@@ -3,16 +3,19 @@
 namespace Tests\Feature;
 
 use App\Models\LegacyUser;
+use App\Mail\DecisionNotice;
 use App\Services\DocumentTypes;
 use App\Services\CcyfStructure;
 use App\Services\PriceCatalogs;
 use App\Services\RegistrationRequirements;
 use App\Services\ServiceTypes;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class PriceCatalogTest extends TestCase
@@ -228,6 +231,43 @@ class PriceCatalogTest extends TestCase
         $this->assertEquals(0, DB::table('ccyf_productos')->where('id', $item->id)->value('activo'));
         $this->get('/nuevo-oficio/8')->assertOk()->assertDontSee('Fruta picada');
         $this->get('/nuevo-oficio/9')->assertOk()->assertSee('Tamaño carta');
+    }
+
+    public function test_admin_can_save_all_food_products_together_without_partial_updates(): void
+    {
+        $this->asUser(1);
+        app(PriceCatalogs::class)->prepare(8);
+        $page = $this->get('/catalogos/8')->assertOk()->assertSee('Guardar todos los productos');
+        $this->assertSame(1, preg_match('/name="version" value="([a-f0-9]{64})"/', $page->getContent(), $match));
+        $catalog = DB::table('ccyf_catalogos')->where('legacy_cat_id', 8)->first();
+        $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog->id)->orderBy('id')->get();
+        $this->assertGreaterThan(2, $products->count());
+        $rows = $products->mapWithKeys(fn ($product) => [$product->id => [
+            'nombre' => $product->nombre, 'unidad' => $product->unidad,
+            'orden' => $product->orden, 'activo' => (int) $product->activo,
+        ]])->all();
+        $ids = $products->pluck('id')->all();
+        $rows[$ids[0]]['nombre'] = 'Alimento ajustado uno';
+        $rows[$ids[1]]['unidad'] = 'porción';
+        $rows[$ids[1]]['activo'] = 0;
+        $this->put('/catalogos/8/productos', ['version' => $match[1], 'products' => $rows])
+            ->assertRedirect('/catalogos/8')->assertSessionHas('status', 'Se guardaron 2 productos.');
+        $this->assertDatabaseHas('ccyf_productos', ['id' => $ids[0], 'nombre' => 'Alimento ajustado uno']);
+        $this->assertDatabaseHas('ccyf_productos', ['id' => $ids[1], 'unidad' => 'porción', 'activo' => 0]);
+
+        $this->put('/catalogos/8/productos', ['version' => $match[1], 'products' => $rows])->assertStatus(409);
+        $page = $this->get('/catalogos/8')->assertOk();
+        $this->assertSame(1, preg_match('/name="version" value="([a-f0-9]{64})"/', $page->getContent(), $match));
+        $rows[$ids[0]]['nombre'] = 'Duplicado';
+        $rows[$ids[1]]['nombre'] = 'duplicado';
+        $rows[$ids[2]]['orden'] = 777;
+        $this->put('/catalogos/8/productos', ['version' => $match[1], 'products' => $rows])
+            ->assertSessionHasErrors('products');
+        $this->assertNotEquals(777, DB::table('ccyf_productos')->where('id', $ids[2])->value('orden'));
+        $this->put('/catalogos/8/productos', ['version' => $match[1], 'products' => [$ids[0] => $rows[$ids[0]]]])
+            ->assertStatus(422);
+        $this->asUser(2);
+        $this->put('/catalogos/8/productos', ['version' => $match[1], 'products' => $rows])->assertForbidden();
     }
 
     public function test_proposal_draft_uses_only_current_products_and_rejects_extra_prices(): void
@@ -492,7 +532,7 @@ class PriceCatalogTest extends TestCase
         $prices = $products->mapWithKeys(fn ($id) => [$id => '22.50'])->all();
         $requirements = app(RegistrationRequirements::class)->activeFor(1);
         $documents = $requirements->mapWithKeys(fn ($requirement) => [
-            $requirement->clave => UploadedFile::fake()->create($requirement->clave.'.pdf', 120, 'application/pdf'),
+            $requirement->clave => $this->pdfUpload($requirement->clave.'.pdf'),
         ])->all();
         $this->asUser(2);
 
@@ -512,6 +552,60 @@ class PriceCatalogTest extends TestCase
         $this->assertDatabaseCount('ccyf_registro_archivos', $requirements->count());
         $this->assertCount($requirements->count(), Storage::disk('local')->allFiles('ccyf/registros/1'));
         $this->get('/nuevo-oficio/registros/1')->assertOk()->assertSee('CCYF-'.now()->format('Y').'-00001');
+
+        $duplicate = (array) DB::table('ccyf_registros')->where('id', 1)->first();
+        unset($duplicate['id']);
+        $duplicate['folio'] = 'CCYF-OTRO-FOLIO';
+        try {
+            DB::table('ccyf_registros')->insert($duplicate);
+            $this->fail('La base de datos permitió duplicar la misma participación.');
+        } catch (UniqueConstraintViolationException) {
+            $this->assertDatabaseCount('ccyf_registros', 1);
+        }
+    }
+
+    public function test_registration_accepts_real_pdf_content_when_mime_is_reported_as_text(): void
+    {
+        Storage::fake('local');
+        $catalog = app(PriceCatalogs::class)->prepare(8);
+        $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog)->pluck('id');
+        $requirements = app(RegistrationRequirements::class)->activeFor(1);
+        $documents = $requirements->mapWithKeys(fn ($requirement) => [
+            $requirement->clave => $this->pdfUpload($requirement->clave.'.pdf')->mimeType('text/plain'),
+        ])->all();
+        $this->asUser(2);
+
+        $this->post('/nuevo-oficio/8/registrar', [
+            'tipo_documento_id' => 1, 'plantel_id' => 23, 'comentarios' => 'Propuesta en PDF',
+            'precios' => $products->mapWithKeys(fn ($id) => [$id => '10.00'])->all(),
+            'documentos' => $documents,
+        ])->assertRedirect('/nuevo-oficio/registros/1')->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('ccyf_registro_archivos', $requirements->count());
+        $this->assertDatabaseHas('ccyf_registro_archivos', ['registro_id' => 1, 'mime' => 'application/pdf']);
+    }
+
+    public function test_registration_names_the_document_when_pdf_content_is_invalid(): void
+    {
+        Storage::fake('local');
+        $catalog = app(PriceCatalogs::class)->prepare(8);
+        $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog)->pluck('id');
+        $requirements = app(RegistrationRequirements::class)->activeFor(1);
+        $documents = $requirements->mapWithKeys(fn ($requirement) => [
+            $requirement->clave => $this->pdfUpload($requirement->clave.'.pdf'),
+        ])->all();
+        $invalid = $requirements->first();
+        $documents[$invalid->clave] = UploadedFile::fake()->createWithContent('aparente.pdf', 'Esto no es un PDF.');
+        $this->asUser(2);
+
+        $this->post('/nuevo-oficio/8/registrar', [
+            'tipo_documento_id' => 1, 'plantel_id' => 23, 'comentarios' => 'Propuesta en PDF',
+            'precios' => $products->mapWithKeys(fn ($id) => [$id => '10.00'])->all(),
+            'documentos' => $documents,
+        ])->assertSessionHasErrors('documentos.'.$invalid->clave);
+        $message = session('errors')->first('documentos.'.$invalid->clave);
+        $this->assertStringContainsString($invalid->nombre, $message);
+        $this->assertStringContainsString('PDF válido', $message);
+        $this->assertDatabaseCount('ccyf_registros', 0);
     }
 
     public function test_complete_registration_rejects_missing_documents_and_duplicates(): void
@@ -531,14 +625,50 @@ class PriceCatalogTest extends TestCase
         $this->assertDatabaseCount('ccyf_registros', 0);
 
         $base['documentos'] = $requirements->mapWithKeys(fn ($requirement) => [
-            $requirement->clave => UploadedFile::fake()->create($requirement->clave.'.pdf', 80, 'application/pdf'),
+            $requirement->clave => $this->pdfUpload($requirement->clave.'.pdf'),
         ])->all();
         $this->post('/nuevo-oficio/8/registrar', $base)->assertSessionHasNoErrors();
         $base['documentos'] = $requirements->mapWithKeys(fn ($requirement) => [
-            $requirement->clave => UploadedFile::fake()->create('duplicate-'.$requirement->clave.'.pdf', 80, 'application/pdf'),
+            $requirement->clave => $this->pdfUpload('duplicate-'.$requirement->clave.'.pdf'),
         ])->all();
         $this->post('/nuevo-oficio/8/registrar', $base)->assertSessionHasErrors('plantel_id');
         $this->assertDatabaseCount('ccyf_registros', 1);
+    }
+
+    public function test_simultaneous_registration_reports_duplicate_without_server_error(): void
+    {
+        Storage::fake('local');
+        $catalog = app(PriceCatalogs::class)->prepare(8);
+        $products = DB::table('ccyf_productos')->where('catalogo_id', $catalog)->pluck('id');
+        $requirements = app(RegistrationRequirements::class)->activeFor(1);
+        $this->asUser(2);
+
+        $insertedByOtherRequest = false;
+        DB::listen(function ($query) use (&$insertedByOtherRequest, $catalog): void {
+            if ($insertedByOtherRequest || ! str_contains($query->sql, 'ccyf_registros')
+                || ! str_contains(strtolower($query->sql), 'exists')) {
+                return;
+            }
+            $insertedByOtherRequest = true;
+            DB::table('ccyf_registros')->insert([
+                'folio' => 'CCYF-SIMULTANEO-99', 'convocatoria_id' => 8, 'catalogo_id' => $catalog,
+                'servicio_id' => 1, 'plantel_id' => 23, 'tipo_documento_id' => 1, 'usu_id' => 2,
+                'solicitante' => 'Otro envío', 'dirigido_a' => 'CCyF', 'comentarios' => 'Envío concurrente',
+                'estado' => 'Recibido', 'enviado_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        });
+
+        $this->post('/nuevo-oficio/8/registrar', [
+            'tipo_documento_id' => 1, 'plantel_id' => 23, 'comentarios' => 'Propuesta concurrente',
+            'precios' => $products->mapWithKeys(fn ($id) => [$id => '10.00'])->all(),
+            'documentos' => $requirements->mapWithKeys(fn ($requirement) => [
+                $requirement->clave => $this->pdfUpload($requirement->clave.'.pdf'),
+            ])->all(),
+        ])->assertSessionHasErrors('plantel_id');
+
+        $this->assertTrue($insertedByOtherRequest);
+        $this->assertDatabaseCount('ccyf_registros', 1);
+        $this->assertDatabaseCount('ccyf_registro_archivos', 0);
     }
 
     public function test_pending_review_requires_permission_and_designation_data(): void
@@ -552,7 +682,11 @@ class PriceCatalogTest extends TestCase
         $this->get("/expedientes/{$record}")->assertOk()->assertSee('CCYF-2026-00001');
 
         $this->asUser(1);
-        $this->get('/convocatorias-pendientes')->assertOk()->assertSee('CCYF-2026-00001');
+        $this->get('/convocatorias-pendientes')->assertOk()
+            ->assertSee('CCYF-2026-00001')->assertSee('Participa para')->assertSee('Cafetería')
+            ->assertSee('Participa en')->assertSee('Plantel Atlacomulco')
+            ->assertSee('Correo electrónico')->assertSee('persona@example.test')
+            ->assertSee('Teléfono')->assertSee('7220000002')->assertSee('Fecha de registro');
         $this->get("/expedientes/{$record}")->assertOk()->assertSee('review-designation.js')
             ->assertSee('fecha_fin_confirmada');
         $this->post("/expedientes/{$record}/finalizar", [
@@ -578,7 +712,182 @@ class PriceCatalogTest extends TestCase
         $this->post("/expedientes/{$record}/finalizar", [
             'decision' => 'no_aceptado', 'respuesta' => 'Otra respuesta.',
         ])->assertStatus(409);
-        $this->get('/convocatorias-finalizadas')->assertOk()->assertSee('CCYF-2026-00001');
+        $this->get('/convocatorias-finalizadas')->assertOk()
+            ->assertSee('CCYF-2026-00001')->assertSee('Participa para')->assertSee('Cafetería')
+            ->assertSee('Participa en')->assertSee('Plantel Atlacomulco')
+            ->assertSee('Correo electrónico')->assertSee('persona@example.test')
+            ->assertSee('Teléfono')->assertSee('7220000002')->assertSee('Fecha de conclusión');
+    }
+
+    public function test_designation_notifies_correct_recipients_and_sends_all_registration_documents_to_legal(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        config()->set('mail.default', 'smtp');
+        config()->set('mail.from.address', 'ccyf@cobaemex.edu.mx');
+        $record = $this->reviewRecord();
+        $requirements = app(RegistrationRequirements::class)->activeFor(1);
+        foreach ($requirements as $requirement) {
+            $path = "ccyf/registros/{$record}/{$requirement->clave}.pdf";
+            $content = '%PDF-1.4 test '.$requirement->clave;
+            Storage::disk('local')->put($path, $content);
+            DB::table('ccyf_registro_archivos')->insert([
+                'registro_id' => $record, 'requisito_id' => $requirement->id,
+                'nombre_original' => $requirement->clave.'.pdf', 'ruta' => $path,
+                'mime' => 'application/pdf', 'bytes' => strlen($content),
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $this->asUser(1);
+        $this->post("/expedientes/{$record}/finalizar", [
+            'decision' => 'designado', 'respuesta' => 'Se designa al participante.',
+            'fecha_inicio' => '2026-10-01', 'fecha_fin' => '2027-09-30',
+            'fecha_fin_confirmada' => '1', 'monto' => '1200.50',
+        ])->assertRedirect('/convocatorias-finalizadas');
+
+        Mail::assertSent(DecisionNotice::class, 2);
+        Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
+            return $mail->audience === 'participant' && $mail->hasTo('persona@example.test')
+                && count($mail->attachments()) === 1;
+        });
+        Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail) use ($requirements): bool {
+            $attachments = $mail->attachments();
+            return $mail->audience === 'internal'
+                && $mail->hasTo('unidad.juridica@cobaemex.edu.mx')
+                && $mail->hasCc('atlacomulco@cobaemex.edu.mx')
+                && $mail->hasCc('mda@cobaemex.edu.mx')
+                && $mail->hasCc('cafeteria.fotocopiado@cobaemex.edu.mx')
+                && count($mail->documents) === $requirements->count()
+                && count($attachments) === $requirements->count() + 1
+                && str_starts_with($mail->letter, '%PDF-');
+        });
+        $this->assertDatabaseHas('ccyf_result_mailings', [
+            'registro_id' => $record, 'audience' => 'internal', 'status' => 'sent',
+            'attachment_count' => $requirements->count() + 1,
+        ]);
+        $this->post("/expedientes/{$record}/notificar")->assertRedirect("/expedientes/{$record}");
+        Mail::assertSent(DecisionNotice::class, 2);
+    }
+
+    public function test_log_mailer_keeps_designation_pending_until_real_delivery_is_configured(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        config()->set('mail.default', 'log');
+        $record = $this->reviewRecord();
+        $requirement = app(RegistrationRequirements::class)->activeFor(1)->first();
+        $path = "ccyf/registros/{$record}/{$requirement->clave}.pdf";
+        Storage::disk('local')->put($path, '%PDF-1.4 test');
+        DB::table('ccyf_registro_archivos')->insert([
+            'registro_id' => $record, 'requisito_id' => $requirement->id,
+            'nombre_original' => $requirement->clave.'.pdf', 'ruta' => $path,
+            'mime' => 'application/pdf', 'bytes' => 13,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->asUser(1);
+        $this->post("/expedientes/{$record}/finalizar", [
+            'decision' => 'designado', 'respuesta' => 'Se designa al participante.',
+            'fecha_inicio' => '2026-10-01', 'fecha_fin' => '2027-09-30',
+            'fecha_fin_confirmada' => '1', 'monto' => '1200.50',
+        ])->assertRedirect('/convocatorias-finalizadas');
+        Mail::assertNothingSent();
+        $this->assertDatabaseCount('ccyf_result_mailings', 2);
+        $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'internal', 'status' => 'pending']);
+
+        config()->set('mail.default', 'smtp');
+        config()->set('mail.from.address', 'ccyf@cobaemex.edu.mx');
+        $this->post("/expedientes/{$record}/notificar")->assertRedirect("/expedientes/{$record}");
+        Mail::assertSent(DecisionNotice::class, 2);
+        $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'internal', 'status' => 'sent']);
+    }
+
+    public function test_pending_convocation_filter_shows_only_active_options(): void
+    {
+        $record = $this->reviewRecord();
+        DB::table('ccyf_convocatorias')->where('id', 8)->update(['activo' => false]);
+        $this->asUser(1);
+
+        $page = $this->get('/convocatorias-pendientes')->assertOk()
+            ->assertSee('Convocatorias activas')->assertSee('CCYF-2026-00001');
+        $html = new \DOMDocument;
+        @$html->loadHTML($page->getContent());
+        $options = (new \DOMXPath($html))->query('//select[@name="convocatoria"]/option/@value');
+        $this->assertSame(['', '9'], array_map(fn ($node) => $node->value, iterator_to_array($options)));
+        $this->get('/convocatorias-pendientes?convocatoria=9')->assertOk();
+        $this->assertDatabaseHas('ccyf_registros', ['id' => $record, 'estado' => 'Recibido']);
+    }
+
+    public function test_bulk_no_accepted_notifies_each_selected_participant(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        config()->set('mail.default', 'smtp');
+        config()->set('mail.from.address', 'ccyf@cobaemex.edu.mx');
+        $first = $this->reviewRecord();
+        $second = (array) DB::table('ccyf_registros')->where('id', $first)->first();
+        unset($second['id']);
+        $second['folio'] = 'CCYF-2026-00002';
+        $second['plantel_id'] = 24;
+        $secondId = DB::table('ccyf_registros')->insertGetId($second);
+
+        $this->asUser(1);
+        $this->get('/convocatorias-pendientes')->assertOk()
+            ->assertSee('Seleccionar todos de esta página')
+            ->assertSee('No aceptado')->assertSee('No designado');
+        $this->post('/convocatorias-pendientes/finalizar-masivo', [
+            'registros' => [$first, $secondId], 'decision' => 'no_aceptado',
+            'respuesta' => 'No cumple los requisitos.',
+        ])->assertRedirect('/convocatorias-finalizadas');
+
+        foreach ([$first, $secondId] as $id) {
+            $this->assertDatabaseHas('ccyf_registros', [
+                'id' => $id, 'estado' => 'Finalizado', 'decision' => 'no_aceptado',
+                'respuesta' => 'No cumple los requisitos.',
+            ]);
+            $this->assertDatabaseHas('ccyf_result_mailings', [
+                'registro_id' => $id, 'audience' => 'participant', 'status' => 'sent',
+            ]);
+        }
+        Mail::assertSent(DecisionNotice::class, 2);
+        Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
+            return $mail->audience === 'participant' && $mail->hasTo('persona@example.test')
+                && $mail->record->decision === 'no_aceptado' && count($mail->attachments()) === 1;
+        });
+        $this->assertDatabaseMissing('ccyf_result_mailings', ['audience' => 'internal']);
+    }
+
+    public function test_bulk_no_designated_keeps_distinct_decision_and_notifies_participant(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        config()->set('mail.default', 'smtp');
+        config()->set('mail.from.address', 'ccyf@cobaemex.edu.mx');
+        $record = $this->reviewRecord();
+        $this->asUser(1);
+
+        $this->post('/convocatorias-pendientes/finalizar-masivo', [
+            'registros' => [$record], 'decision' => 'designado',
+            'respuesta' => 'No fue seleccionado.',
+        ])->assertSessionHasErrors('decision');
+        $this->assertDatabaseHas('ccyf_registros', ['id' => $record, 'estado' => 'Recibido']);
+
+        $this->post('/convocatorias-pendientes/finalizar-masivo', [
+            'registros' => [$record], 'decision' => 'no_designado',
+            'respuesta' => 'No fue seleccionado.',
+        ])->assertRedirect('/convocatorias-finalizadas');
+        $this->assertDatabaseHas('ccyf_registros', [
+            'id' => $record, 'estado' => 'Finalizado', 'decision' => 'no_designado',
+        ]);
+        $this->assertDatabaseHas('ccyf_result_mailings', [
+            'registro_id' => $record, 'audience' => 'participant', 'status' => 'sent',
+        ]);
+        Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
+            return $mail->audience === 'participant' && $mail->hasTo('persona@example.test')
+                && $mail->record->decision === 'no_designado' && count($mail->attachments()) === 1;
+        });
+        $this->assertDatabaseMissing('ccyf_result_mailings', ['audience' => 'internal']);
     }
 
     public function test_bulk_rejection_is_atomic_and_historical_result_is_read_only(): void
@@ -767,6 +1076,47 @@ class PriceCatalogTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $response->getContent());
     }
 
+    public function test_finalized_current_record_shows_its_designation_letter_in_list_and_detail(): void
+    {
+        $record = $this->reviewRecord();
+        $url = "/expedientes/{$record}/carta-resultado.pdf";
+        $this->get($url)->assertRedirect('/acceso');
+        $this->asUser(1);
+        $this->get($url)->assertNotFound();
+
+        DB::table('ccyf_registros')->where('id', $record)->update([
+            'estado' => 'Finalizado', 'decision' => 'designado',
+            'respuesta' => 'Propuesta seleccionada', 'fecha_inicio' => '2026-10-01',
+            'fecha_fin' => '2027-10-01', 'monto' => 1200,
+        ]);
+        $this->get('/convocatorias-finalizadas')->assertOk()
+            ->assertSee('Carta de designación')->assertSee($url, false);
+        $this->get("/expedientes/{$record}")->assertOk()
+            ->assertSee('Ver carta de designación PDF')->assertSee($url, false);
+        $pdf = $this->get($url)->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        $this->assertStringContainsString('inline;', $pdf->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('no-store', $pdf->headers->get('Cache-Control'));
+
+        $this->asUser(2);
+        $this->get($url)->assertOk();
+        DB::table('ccyf_registros')->where('id', $record)->update([
+            'decision' => 'no_designado', 'fecha_inicio' => null, 'fecha_fin' => null, 'monto' => null,
+        ]);
+        $this->get('/convocatorias-finalizadas')->assertOk()->assertSee('Carta de no designación');
+        $this->get("/expedientes/{$record}")->assertOk()->assertSee('Ver carta de no designación PDF');
+        $noDesignation = $this->get($url)->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $noDesignation->getContent());
+        $this->assertStringContainsString('Carta_No_Designado', $noDesignation->headers->get('Content-Disposition'));
+
+        DB::table('ccyf_registros')->where('id', $record)->update(['decision' => 'no_aceptado']);
+        $this->get('/convocatorias-finalizadas')->assertOk()->assertSee('Carta de no aceptación');
+        $this->get("/expedientes/{$record}")->assertOk()->assertSee('Ver carta de no aceptación PDF');
+        $noAcceptance = $this->get($url)->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $noAcceptance->getContent());
+        $this->assertStringContainsString('Carta_No_Aceptado', $noAcceptance->headers->get('Content-Disposition'));
+    }
+
     public function test_finalized_exports_match_original_columns_filters_and_permissions(): void
     {
         DB::connection('legacy')->table('tm_documento')->insert([
@@ -880,6 +1230,29 @@ class PriceCatalogTest extends TestCase
         } finally {
             unlink($path);
         }
+    }
+
+    private function pdfUpload(string $name): UploadedFile
+    {
+        $content = "%PDF-1.4\n";
+        $objects = [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> >>\nendobj\n",
+        ];
+        $offsets = [];
+        foreach ($objects as $object) {
+            $offsets[] = strlen($content);
+            $content .= $object;
+        }
+        $xref = strlen($content);
+        $content .= "xref\n0 4\n0000000000 65535 f \n";
+        foreach ($offsets as $offset) {
+            $content .= sprintf("%010d 00000 n \n", $offset);
+        }
+        $content .= "trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF\n";
+
+        return UploadedFile::fake()->createWithContent($name, $content);
     }
 
     private function reviewRecord(): int

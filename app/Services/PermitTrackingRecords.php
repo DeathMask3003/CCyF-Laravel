@@ -21,7 +21,7 @@ class PermitTrackingRecords
             ->whereIn('d.trami_id', [3, 4])
             ->whereNotNull('d.doc_fech_ini')->whereNotNull('d.doc_fech_fin')
             ->where('d.doc_fech_ini', '<>', '0000-00-00')->where('d.doc_fech_fin', '<>', '0000-00-00')
-            ->get(['d.doc_id', 'd.trami_id', 'd.usu_id', 'd.doc_exter', 'd.doc_fech_ini', 'd.doc_fech_fin',
+            ->get(['d.doc_id', 'd.trami_id', 'd.usu_id', 'd.doc_exter', 'd.doc_fech_ini', 'd.doc_fech_fin', 'd.doc_designado',
                 'd.fech_crea', 'd.est', 'c.cat_nom', 'a.area_nom', 'u.usu_area', 'u.usu_correo',
                 'u.usu_telf', 'u.ine', 'u.direcc']);
 
@@ -41,6 +41,7 @@ class PermitTrackingRecords
                 'fecha_fin' => $follow?->fecha_fin_renovada ?: $row->doc_fech_fin,
                 'registro_at' => $row->fech_crea,
                 'estado' => (int) $row->est === 0 ? 'Designado' : 'Sin datos',
+                'doc_designado' => (int) $row->doc_designado,
                 'seguimiento' => $follow, 'archivos' => $follow ? ($files->get($follow->id) ?: collect())->keyBy('numero') : collect(),
             ];
         });

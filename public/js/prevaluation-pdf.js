@@ -23,7 +23,33 @@ if (dialog) {
     let renderVersion = 0;
     let observer = null;
     let pageSlots = [];
+    let activeLink = null;
     const renderTasks = new Set();
+    const viewRequests = new Set();
+
+    async function markViewed(link) {
+        const url = link?.dataset.viewedUrl;
+        if (!url || link.classList.contains('is-viewed') || viewRequests.has(url)) return;
+        viewRequests.add(url);
+        try {
+            const token = dialog.querySelector('input[name="_token"]')?.value;
+            const response = await fetch(url, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'X-CSRF-TOKEN': token || '', 'Accept': 'application/json' },
+            });
+            if (!response.ok) throw new Error(`No se pudo guardar la visualización (${response.status}).`);
+            link.classList.add('is-viewed');
+            const mark = link.querySelector('.preval-viewed-mark');
+            if (mark) {
+                mark.setAttribute('aria-label', 'PDF visto');
+                mark.title = 'PDF visto';
+            }
+        } catch (exception) {
+            console.error('No se pudo guardar la visualización del PDF:', exception);
+        } finally {
+            viewRequests.delete(url);
+        }
+    }
 
     const updateControls = () => {
         count.textContent = `Página ${pageNumber} de ${pdf?.numPages ?? 1}`;
@@ -91,6 +117,7 @@ if (dialog) {
             slot.style.minHeight = `${Math.floor(viewport.height)}px`;
             slot.replaceChildren(canvas);
             slot.dataset.state = 'done';
+            if (number === 1 && activeLink?.dataset.viewedUrl) markViewed(activeLink);
             page.cleanup();
         } catch (exception) {
             if (version !== renderVersion || exception?.name === 'RenderingCancelledException') return;
@@ -146,6 +173,7 @@ if (dialog) {
 
     async function load(link) {
         const current = ++requestId;
+        activeLink = link;
         links.forEach(item => item.classList.toggle('selected', item === link));
         name.textContent = link.dataset.pdfName || 'Documento PDF';
         open.href = link.href;
@@ -200,6 +228,7 @@ if (dialog) {
     });
     dialog.addEventListener('close', () => {
         requestId++;
+        activeLink = null;
         clearPages();
         const old = pdf;
         pdf = null;

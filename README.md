@@ -1,22 +1,20 @@
 # CCyF · Laravel 12
 
-Nueva aplicación para el Concurso de Cafetería y Fotocopiado de CoBaEMex. La copia PHP original está en `D:\wamp64\www\ccyf`; este proyecto permanece separado para migrar y comprobar cada flujo.
+Aplicación del Concurso de Cafetería y Fotocopiado de COBAEM. El proyecto Laravel se desarrolla en `D:\wamp64\www\ccyf-laravel`; la copia del sistema PHP original está en `D:\wamp64\www\ccyf`.
 
-## Estado
+## Desarrollo local
 
-Funcionan el acceso con código por correo, los catálogos de CCyF, planteles, convocatorias, nuevo registro, revisión de propuestas, resultados y exportaciones PDF/Excel. La gestión de usuarios y roles ya usa tablas locales de Laravel. La evaluación especializada, contratos y reportes restantes siguen pendientes. Véase [el registro de migración](docs/MIGRACION.md).
-
-## Verificación local
+La instalación local usa SQLite y archivos de prueba. Su `.env`, la base SQLite y `storage/app/private` no se publican por Git.
 
 ```powershell
 php artisan ccyf:preflight --check-db
-php artisan migrate --force
-php artisan ccyf:import-identity
 php artisan test
 ```
 
-`ccyf:import-identity` se ejecuta una sola vez: copia usuarios, roles y permisos de CCyF a SQLite conservando los ID y las contraseñas existentes. Si ya hay cuentas locales, termina sin sobrescribirlas. Las ediciones posteriores se guardan solo en SQLite. La conexión `legacy` tiene permisos de lectura; no ejecutar `migrate` sobre `ccyf`.
+El correo local usa `MAIL_MAILER=log`, por lo que las pruebas no envían correos reales. Apache sirve la carpeta `public` en `http://localhost:8082`.
 
-El correo usa `MAIL_MAILER=log` durante las pruebas locales. El código se registra en `storage/logs/laravel.log`; no se entrega por correo real.
+## Producción
 
-Apache tiene un host local en `127.0.0.1:8082` cuyo `DocumentRoot` es la carpeta `public` de este proyecto. El `.htaccess` de la raíz deniega acceso directo al código y a `.env`.
+El despliegue usará la base MySQL de producción existente y los expedientes históricos de producción. **No se trasladarán los registros ni archivos de prueba locales.** Git publica únicamente el código; la base y los archivos se respaldan y preparan por separado. La secuencia y las verificaciones pendientes están en [la guía de despliegue](docs/DESPLIEGUE_PRODUCCION.md).
+
+El [registro de migración](docs/MIGRACION.md) describe decisiones de la fase local inicial; no sustituye la guía de despliegue en producción.

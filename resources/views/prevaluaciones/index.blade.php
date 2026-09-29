@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260922-5">@endpush
+@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260927-7"><link rel="stylesheet" href="{{ asset('css/prevaluation-summary.css') }}?v=20260923-2"><link rel="stylesheet" href="{{ asset('css/prevaluation-assignments.css') }}?v=20260923-1">@endpush
 
 @section('title', 'Prevaluaciones')
 
@@ -10,6 +10,10 @@
     <span class="pill pill-neutral">{{ $totalCafe + $totalFoto }} expedientes</span>
 </div>
 
+@if($isEvaluator && ! $isAdmin && $assignments->isNotEmpty())
+    <div class="preval-assigned-notice">{{ $campuses->isEmpty() ? 'Aún no tienes planteles asignados en esta convocatoria.' : 'Mostrando automáticamente los expedientes de tus planteles asignados.' }}</div>
+@endif
+
 <section class="panel preval-panel">
     <nav class="tracking-tabs" aria-label="Tipo de servicio">
         <a href="{{ route('prevaluaciones.index', ['servicio'=>'cafeteria']) }}" @class(['active' => $service === 'cafeteria']) aria-current="{{ $service === 'cafeteria' ? 'page' : 'false' }}">☕ Cafetería <strong>{{ $totalCafe }}</strong></a>
@@ -17,27 +21,44 @@
     </nav>
 
     <div class="preval-intro"><div><span class="eyebrow">{{ $service === 'cafeteria' ? 'Servicio de cafetería' : 'Servicio de fotocopiado' }}</span><h2>{{ $service === 'cafeteria' ? 'Cafetería' : 'Fotocopiado' }}</h2></div><span class="muted">{{ $rows->total() }} resultados</span></div>
-    <form class="preval-filters" method="get" action="{{ route('prevaluaciones.index') }}">
+    <form class="preval-filters" method="get" action="{{ route('prevaluaciones.index') }}" data-preval-filters>
         <input type="hidden" name="servicio" value="{{ $service }}">
         <div><label for="preval-convocatoria">Convocatoria actual</label><select id="preval-convocatoria" name="convocatoria">@if($current)<option value="{{ $current->id ?: $current->legacy_cat_id }}">{{ $current->numero }}</option>@else<option value="">Sin convocatoria</option>@endif</select></div>
-        <div><label for="preval-plantel">Plantel</label><select id="preval-plantel" name="plantel"><option value="">Todos los planteles</option>@foreach($campuses as $campus)<option value="{{ $campus }}" @selected($plantel === $campus)>{{ $campus }}</option>@endforeach</select></div>
-        @if($isAdmin)<div><label for="preval-estado">Seguimiento</label><select id="preval-estado" name="estado"><option value="pendiente" @selected(request('estado') !== 'evaluado')>Pendientes</option><option value="evaluado" @selected(request('estado') === 'evaluado')>Prevaluados</option></select></div>@endif
+        <div><label for="preval-plantel">{{ $isEvaluator && ! $isAdmin && $assignments->isNotEmpty() ? 'Mis planteles' : 'Plantel' }}</label><select id="preval-plantel" name="plantel"><option value="">{{ $isEvaluator && ! $isAdmin && $assignments->isNotEmpty() ? 'Todos mis planteles' : 'Todos los planteles' }}</option>@foreach($campuses as $campus)<option value="{{ $campus }}" @selected($plantel === $campus)>{{ $campus }}</option>@endforeach</select></div>
+        @if($isAdmin || $isEvaluator)<div><label for="preval-estado">Seguimiento</label><select id="preval-estado" name="estado"><option value="pendiente" @selected(request('estado') !== 'evaluado')>Pendientes</option><option value="evaluado" @selected(request('estado') === 'evaluado')>{{ $isAdmin ? 'Prevaluados' : 'Mis prevaluados' }}</option></select></div>@endif
         <div class="preval-search"><label for="preval-buscar">Buscar</label><input id="preval-buscar" type="search" name="buscar" maxlength="150" value="{{ request('buscar') }}" placeholder="Nombre, CURP, plantel…"></div>
-        <button class="button" type="submit">Buscar</button><a class="outline-button button-link" href="{{ route('prevaluaciones.index', ['servicio'=>$service]) }}">Limpiar</a>
+        <button class="button preval-filter-submit" type="submit">Buscar</button><a class="outline-button button-link" href="{{ route('prevaluaciones.index', ['servicio'=>$service]) }}" data-preval-clear>Limpiar</a><span class="preval-filter-status" role="status" aria-live="polite" data-preval-filter-status></span>
     </form>
-    <div class="preval-compare-bar"><div><strong>Comparación de precios</strong><small>Selecciona un plantel para ver quién ofrece el menor total y el precio más bajo por producto.</small></div>@if($plantel)<a class="outline-button button-link" href="{{ route('prevaluaciones.index', array_merge(request()->except(['registro','comparar','page']), ['servicio'=>$service,'plantel'=>$plantel,'comparar'=>1])) }}">Comparar precios</a>@else<span class="preval-compare-hint">Elige un plantel y pulsa Buscar</span>@endif</div>
+    <div class="preval-compare-bar"><div><strong>Comparación de precios</strong><small>Selecciona un plantel para ver quién ofrece el menor total y el precio más bajo por producto.</small></div>@if($plantel)<a class="outline-button button-link" href="{{ route('prevaluaciones.index', array_merge(request()->except(['registro','comparar','page']), ['servicio'=>$service,'plantel'=>$plantel,'comparar'=>1])) }}">Comparar precios</a>@else<span class="preval-compare-hint">Elige un plantel para comparar precios</span>@endif</div>
+    @if($isAdmin)<div class="preval-summary-bar"><div><span class="eyebrow">Vista administrativa</span><strong>Resumen de prevaluaciones</strong><small>Consulta todas las propuestas de la convocatoria actual, su avance y el dictamen en PDF.</small></div><a class="button button-link" href="{{ route('prevaluaciones.index', array_merge(request()->except(['registro','comparar','resumen','page']), ['servicio'=>$service,'resumen'=>1])) }}">Ver prevaluaciones</a></div>@endif
 
-    <div class="preval-table-wrap"><table class="preval-table"><thead><tr><th>Permisionario</th><th>CURP</th><th>Concurso para</th><th>Teléfono</th><th>Acción</th></tr></thead><tbody>
+    <div class="preval-results" data-preval-results aria-busy="false"><div class="preval-table-wrap"><table class="preval-table"><thead><tr><th>Permisionario</th><th>CURP</th><th>Concurso para</th><th>Teléfono</th><th>Acción</th></tr></thead><tbody>
         @forelse($rows as $row)
             <tr><td><strong>{{ $row->nombre ?: 'Sin nombre' }}</strong><small>{{ $row->convocatoria }} · {{ $row->origen === 'historico' ? 'Histórico' : 'Nuevo' }}</small></td>
                 <td>{{ mb_strtoupper((string) $row->curp) ?: '—' }}</td><td>{{ $row->plantel ?: 'Sin plantel' }}</td><td>{{ $row->telefono ?: '—' }}</td>
-                <td><div class="preval-table-action"><span @class(['preval-state', 'reviewed' => $row->evaluado])>{{ $row->evaluado ? (match((int) $row->resultado) {1=>'Viable',2=>'Probable',3=>'No viable',default=>'Prevaluado'}) : ($row->owner ? 'En revisión' : 'Pendiente') }}</span>@if($isEvaluator && ! $row->evaluado)<form method="post" action="{{ route('prevaluaciones.claim', $row->key) }}">@csrf @foreach(request()->only(['servicio','convocatoria','plantel','buscar','page']) as $name => $value)<input type="hidden" name="{{ $name }}" value="{{ $value }}">@endforeach<button class="button" type="submit">{{ $row->owner ? 'Continuar' : 'Tomar expediente' }}</button></form>@else<a class="button button-link" href="{{ route('prevaluaciones.index', array_merge(request()->except(['registro','comparar']), ['servicio'=>$service,'registro'=>$row->key])) }}">Revisar expediente</a>@endif</div></td></tr>
+                <td><div class="preval-table-action"><span @class(['preval-state', 'reviewed' => $row->evaluado])>{{ $row->evaluado ? (match((int) $row->resultado) {1=>'Viable',2=>'Probable',3=>'No viable',default=>'Prevaluado'}) : ($row->owner ? 'En revisión' : 'Pendiente') }}</span>@if($isEvaluator && ! $row->evaluado)<form method="post" action="{{ route('prevaluaciones.claim', $row->key) }}">@csrf @foreach(request()->only(['servicio','convocatoria','plantel','buscar','estado','page']) as $name => $value)<input type="hidden" name="{{ $name }}" value="{{ $value }}">@endforeach<button class="button" type="submit">{{ $row->owner ? 'Continuar' : 'Tomar expediente' }}</button></form>@else<a class="button button-link" href="{{ route('prevaluaciones.index', array_merge(request()->except(['registro','comparar']), ['servicio'=>$service,'registro'=>$row->key])) }}">{{ $isEvaluator && ! $isAdmin && $row->evaluado ? 'Corregir prevaluación' : 'Revisar expediente' }}</a>@endif</div></td></tr>
         @empty
             <tr><td colspan="5" class="tracking-empty">No hay expedientes con estos filtros.</td></tr>
         @endforelse
     </tbody></table></div>
     @if($rows->hasPages())<nav class="pagination" aria-label="Páginas de expedientes">@if($rows->onFirstPage())<span>← Anterior</span>@else<a href="{{ $rows->previousPageUrl() }}">← Anterior</a>@endif<strong>Página {{ $rows->currentPage() }} de {{ $rows->lastPage() }}</strong>@if($rows->hasMorePages())<a href="{{ $rows->nextPageUrl() }}">Siguiente →</a>@else<span>Siguiente →</span>@endif</nav>@endif
+    </div>
 </section>
+
+@if($summaryRows !== null)
+<dialog id="preval-summary-dialog" class="preval-summary-dialog" aria-labelledby="preval-summary-title">
+    <div class="preval-summary-shell">
+        <header class="preval-modal-head"><div><span class="preval-modal-kicker">{{ $current?->numero }} · {{ $service === 'cafeteria' ? 'Cafetería' : 'Fotocopiado' }}</span><h2 id="preval-summary-title">Resumen de prevaluaciones</h2><p>{{ $plantel ?: 'Todos los planteles' }} · {{ $summaryRows->count() }} propuestas</p></div><button type="button" class="preval-dialog-close" aria-label="Cerrar resumen" data-close-summary>×</button></header>
+        <div class="preval-summary-toolbar"><div><strong>Seguimiento de expedientes</strong><small>Incluye pendientes, en revisión y evaluados de esta convocatoria.</small></div><a class="button button-link" href="{{ route('prevaluaciones.annex', ['servicio'=>$service]) }}">Descargar Anexo Global PDF ↓</a></div>
+        <div class="preval-summary-scroll"><table class="preval-summary-table"><thead><tr><th>Plantel / Permisionario</th><th>Prevaluador</th><th>Resultado</th><th>Campos evaluados</th><th>Última evaluación</th><th>Acciones</th></tr></thead><tbody>
+            @forelse($summaryRows as $summary)
+                @php($item = $summary->record)
+                <tr><td><strong>{{ $item->nombre ?: 'Sin nombre' }}</strong><small>{{ $item->plantel ?: 'Sin plantel' }} · {{ mb_strtoupper((string) $item->curp) ?: 'Sin CURP' }}</small></td><td>{{ $summary->evaluator ?: 'Sin asignar' }}</td><td><span @class(['preval-state', 'reviewed' => $item->evaluado])>{{ $item->evaluado ? (match((int) $item->resultado) {1=>'Viable',2=>'Probable',3=>'No viable',default=>'Prevaluado'}) : ($item->owner ? 'En revisión' : 'Pendiente') }}</span></td><td>{{ $summary->evaluatedFields }}</td><td>{{ $summary->date ? \Illuminate\Support\Carbon::parse($summary->date)->format('d/m/Y H:i') : '—' }}</td><td><div class="preval-summary-actions"><a href="{{ route('prevaluaciones.index', ['servicio'=>$service,'registro'=>$item->key]) }}">Ver detalle</a>@if($item->evaluado || $summary->evaluatedFields)<a href="{{ route('prevaluaciones.report', $item->key) }}" target="_blank" rel="noopener">Evaluación PDF ↗</a>@else<span>PDF pendiente</span>@endif</div></td></tr>
+            @empty<tr><td colspan="6" class="tracking-empty">No hay propuestas en esta convocatoria{{ $plantel ? ' para el plantel seleccionado' : '' }}.</td></tr>@endforelse
+        </tbody></table></div>
+    </div>
+</dialog>
+@endif
 
 @if($priceAnalysis)
 <dialog id="preval-price-dialog" class="preval-price-dialog" aria-labelledby="preval-price-title">
@@ -58,7 +79,7 @@
                 <div class="preval-doc-list">
                     <a class="preval-doc-link preval-report-link" href="{{ route('prevaluaciones.report', $selected->key) }}" target="_blank" rel="noopener" data-preval-pdf data-pdf-name="Prevaluación y precios"><span class="preval-pdf-icon">PDF</span><span>Vista previa de prevaluación y precios<small>Reporte con todos los productos de la propuesta</small></span><span aria-hidden="true">↗</span></a>
                     @foreach($detail['documents'] as $document)
-                    @if($document->available)<a class="preval-doc-link" href="{{ route('prevaluaciones.file', ['key'=>$selected->key,'field'=>$document->clave]) }}" target="_blank" rel="noopener" @if($document->mime === 'application/pdf') data-preval-pdf data-pdf-name="{{ $document->nombre }}" @endif><span class="preval-pdf-icon">{{ $document->mime === 'application/pdf' ? 'PDF' : 'DOC' }}</span><span>{{ $document->nombre }}</span><span aria-hidden="true">↗</span></a>
+                    @if($document->available)<a @class(['preval-doc-link', 'is-viewed' => $document->mime === 'application/pdf' && in_array($document->clave, $viewedFields, true)]) href="{{ route('prevaluaciones.file', ['key'=>$selected->key,'field'=>$document->clave]) }}" target="_blank" rel="noopener" @if($document->mime === 'application/pdf') data-preval-pdf data-pdf-name="{{ $document->nombre }}" data-viewed-url="{{ route('prevaluaciones.viewed', ['key'=>$selected->key,'field'=>$document->clave]) }}" @endif><span class="preval-pdf-icon">{{ $document->mime === 'application/pdf' ? 'PDF' : 'DOC' }}</span><span>{{ $document->nombre }}</span>@if($document->mime === 'application/pdf')<span class="preval-viewed-mark" aria-label="{{ in_array($document->clave, $viewedFields, true) ? 'PDF visto' : 'PDF sin revisar' }}" title="{{ in_array($document->clave, $viewedFields, true) ? 'PDF visto' : 'PDF sin revisar' }}">✓✓</span>@else<span aria-hidden="true">↗</span>@endif</a>
                     @else<span class="preval-doc-missing"><span class="preval-pdf-icon">—</span><span>{{ $document->nombre }}</span><small>Sin archivo</small></span>@endif
                 @endforeach</div>
             </aside>
@@ -71,7 +92,7 @@
 
             <section class="preval-checklist" aria-label="Prevaluación"><div class="preval-section-head"><span class="eyebrow">03 · Dictamen</span><h3>Revisión documental</h3><small>{{ $canEvaluate ? 'Puedes guardar esta prevaluación' : ($isAdmin ? 'Vista del administrador' : 'Consulta de evaluación') }}</small></div>
                 @if($errors->any())<div class="tracking-errors" role="alert"><strong>Revisa el formulario.</strong><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
-                @if($detail['owner'] && ! $canEvaluate && ! $isAdmin)<div class="preval-owner">Este expediente pertenece a otro prevaluador o ya fue finalizado.</div>@endif
+                @if($detail['owner'] && ! $canEvaluate && ! $isAdmin)<div class="preval-owner">Este expediente pertenece a otro prevaluador.</div>@endif
                 <form method="post" action="{{ route('prevaluaciones.save', $selected->key) }}" class="preval-evaluation-form">@csrf @method('put')
                     @foreach(request()->only(['servicio','convocatoria','plantel','buscar','estado','page']) as $name => $value)<input type="hidden" name="{{ $name }}" value="{{ $value }}">@endforeach
                     <div class="preval-checklist-scroll"><h4>Documentos</h4>
@@ -87,7 +108,7 @@
                     @endif</div>
                     <div class="preval-decision"><label for="preval-result">Resultado de la prevaluación</label><select id="preval-result" name="resultado" @disabled(! $canEvaluate)><option value="">Sin dictamen aún</option><option value="1" @selected(old('resultado', $detail['result']) == 1)>Viable</option><option value="2" @selected(old('resultado', $detail['result']) == 2)>Probable</option><option value="3" @selected(old('resultado', $detail['result']) == 3)>No viable</option></select>@if($canEvaluate)<button type="submit" class="button">Guardar prevaluación</button>@endif</div>
                 </form>
-                @if($canEvaluate)<form method="post" action="{{ route('prevaluaciones.release', $selected->key) }}" class="preval-release-form">@csrf @method('delete')<input type="hidden" name="servicio" value="{{ $service }}">@if($plantel)<input type="hidden" name="plantel" value="{{ $plantel }}">@endif<button type="submit" class="outline-button">Liberar expediente</button><small>Se eliminará el avance guardado y otro prevaluador podrá tomarlo.</small></form>@endif
+                @if($canEvaluate && ! $selected->evaluado)<form method="post" action="{{ route('prevaluaciones.release', $selected->key) }}" class="preval-release-form">@csrf @method('delete')<input type="hidden" name="servicio" value="{{ $service }}">@if($plantel)<input type="hidden" name="plantel" value="{{ $plantel }}">@endif<button type="submit" class="outline-button">Liberar expediente</button><small>Se eliminará el avance guardado y otro prevaluador podrá tomarlo.</small></form>@endif
                 @if($isAdmin)<form method="post" action="{{ route('prevaluaciones.note', $selected->key) }}" class="preval-admin-form">@csrf @method('put')@foreach(request()->only(['servicio','convocatoria','plantel','buscar','estado','page']) as $name => $value)<input type="hidden" name="{{ $name }}" value="{{ $value }}">@endforeach<label for="preval-admin-note">Observaciones del administrador</label><textarea id="preval-admin-note" name="observaciones" rows="3" maxlength="3000" required placeholder="Registra las observaciones finales del expediente">{{ old('observaciones', $detail['adminNote']) }}</textarea><button type="submit" class="outline-button">Guardar observaciones</button></form>
                 @elseif($detail['adminNote'])<div class="preval-admin-readonly"><strong>Observaciones del administrador</strong><p>{{ $detail['adminNote'] }}</p></div>@endif
             </section>
@@ -96,8 +117,15 @@
 </dialog>
 @endif
 @push('scripts')
+<script src="{{ asset('js/prevaluation-filters.js') }}?v=20260927-1" defer></script>
 <script>
 (() => {
+    const summaryDialog = document.getElementById('preval-summary-dialog');
+    if (summaryDialog) {
+        summaryDialog.showModal();
+        summaryDialog.querySelector('[data-close-summary]').addEventListener('click', () => summaryDialog.close());
+        summaryDialog.addEventListener('close', () => { const url = new URL(location.href); url.searchParams.delete('resumen'); history.replaceState(null, '', url); });
+    }
     const priceDialog = document.getElementById('preval-price-dialog');
     if (priceDialog) {
         priceDialog.showModal();
@@ -115,6 +143,6 @@
     });
 })();
 </script>
-<script type="module" src="{{ asset('js/prevaluation-pdf.js') }}?v=20260922-4"></script>
+<script type="module" src="{{ asset('js/prevaluation-pdf.js') }}?v=20260927-6"></script>
 @endpush
 @endsection

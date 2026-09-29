@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Services\LegacyPasswordVerifier;
 use App\Services\MexicanPhone;
+use App\Services\ProfilePhotos;
+use App\Services\SatElectronicSignatures;
 use App\Services\SignatureImages;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +17,8 @@ use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
-    public function show(Request $request, SignatureImages $signatures): View
+    public function show(Request $request, SignatureImages $signatures, ProfilePhotos $photos,
+        SatElectronicSignatures $sat): View
     {
         return view('perfil.show', [
             'user' => $request->user(),
@@ -26,7 +29,32 @@ class ProfileController extends Controller
             'lastLocation' => DB::table('ccyf_ubicaciones')->where('usu_id', $request->user()->getKey())->orderByDesc('fecha_registro')->first(),
             'canManageSignature' => $signatures->canView($request->user()),
             'signatureAvailable' => $signatures->pathFor($request->user()) !== null,
+            'photoAvailable' => $photos->pathFor($request->user()) !== null,
+            'satStatus' => $signatures->canView($request->user()) ? $sat->status($request->user()) : null,
         ]);
+    }
+
+    public function photo(Request $request, ProfilePhotos $photos): BinaryFileResponse
+    {
+        $path = $photos->pathFor($request->user());
+        abort_unless($path, 404);
+        $response = response()->file($path, [
+            'Content-Type' => getimagesize($path)['mime'],
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+        $response->setPrivate();
+        $response->headers->addCacheControlDirective('no-store');
+        return $response;
+    }
+
+    public function uploadPhoto(Request $request, ProfilePhotos $photos): RedirectResponse
+    {
+        $data = $request->validate([
+            'foto' => ['required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:3072',
+                'dimensions:max_width=5000,max_height=5000'],
+        ]);
+        $photos->save($request->user(), $data['foto']);
+        return back()->with('status', 'Tu foto de perfil se actualizó correctamente.');
     }
 
     public function signature(Request $request, SignatureImages $signatures): BinaryFileResponse
@@ -55,6 +83,38 @@ class ProfileController extends Controller
         $signatures->save($request->user(), $data['firma']);
 
         return back()->with('status', 'Tu firma se actualizó correctamente.');
+    }
+
+    public function uploadSatSignature(Request $request, SignatureImages $signatures,
+        SatElectronicSignatures $sat): RedirectResponse
+    {
+        abort_unless($signatures->canView($request->user()), 403);
+        $data = $request->validate([
+            'alias' => ['nullable', 'string', 'max:80'],
+            'cer' => ['required', 'file', 'max:128'],
+            'key' => ['required', 'file', 'max:256'],
+            'password_sat' => ['required', 'string', 'max:1024'],
+        ]);
+        $sat->save($request->user(), $data['cer'], $data['key'], $data['password_sat'],
+            (string) ($data['alias'] ?? 'Mi e.firma SAT'));
+        return back()->with('status', 'El certificado y la clave de tu e.firma se validaron y guardaron.');
+    }
+
+    public function deleteSatSignature(Request $request, SignatureImages $signatures,
+        SatElectronicSignatures $sat): RedirectResponse
+    {
+        abort_unless($signatures->canView($request->user()), 403);
+        $sat->delete($request->user());
+        return back()->with('status', 'La e.firma se eliminó físicamente del servidor.');
+    }
+
+    public function signatureMethod(Request $request, SignatureImages $signatures,
+        SatElectronicSignatures $sat): RedirectResponse
+    {
+        abort_unless($signatures->canView($request->user()), 403);
+        $data = $request->validate(['metodo' => ['required', 'in:efirma,imagen']]);
+        $sat->setMethod($request->user(), $data['metodo']);
+        return back()->with('status', 'Método de firma preferido actualizado.');
     }
 
     public function update(Request $request): RedirectResponse

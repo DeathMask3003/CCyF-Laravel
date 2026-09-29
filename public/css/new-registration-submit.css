@@ -1,0 +1,12 @@
+.newreg-submit-dialog { width: min(440px, calc(100vw - 32px)); max-width: none; padding: 38px 34px 32px; border: 1px solid #ead9df; border-radius: 22px; background: #fff; color: #30232b; text-align: center; box-shadow: 0 32px 90px rgba(32, 8, 19, .32); }
+.newreg-submit-dialog:not([open]) { display: none; }
+.newreg-submit-dialog[open] { display: grid; justify-items: center; }
+.newreg-submit-dialog::backdrop { background: rgba(25, 8, 18, .68); backdrop-filter: blur(3px); }
+.newreg-submit-spinner { width: 54px; height: 54px; margin-bottom: 21px; border: 5px solid #f1e1e8; border-top-color: #611232; border-radius: 50%; animation: newreg-submit-spin .8s linear infinite; }
+.newreg-submit-kicker { color: #9a6c41; font-size: .68rem; font-weight: 850; letter-spacing: .16em; text-transform: uppercase; }
+.newreg-submit-dialog h2 { margin: 8px 0 10px; color: #611232; font-size: clamp(1.3rem, 4vw, 1.65rem); line-height: 1.2; }
+.newreg-submit-dialog p { margin: 0; color: #63525b; font-size: .92rem; line-height: 1.55; }
+.newreg-submit-note { width: 100%; margin-top: 24px; padding: 13px 15px; border-radius: 11px; background: #f8f0f3; color: #694359; font-size: .78rem; font-weight: 700; line-height: 1.45; }
+html.newreg-is-submitting { overflow: hidden; }
+@keyframes newreg-submit-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .newreg-submit-spinner { animation-duration: 2s; } }

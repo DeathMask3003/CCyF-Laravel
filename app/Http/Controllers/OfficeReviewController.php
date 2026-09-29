@@ -9,6 +9,8 @@ use App\Services\DocumentFiles;
 use App\Services\LegacyMenu;
 use App\Services\PrevaluationCatalog;
 use App\Services\PrevaluationRecords;
+use App\Services\ResultNotifications;
+use App\Services\ResultLetterPdf;
 use Illuminate\Http\Response;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,6 +20,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Throwable;
 
 class OfficeReviewController extends Controller
 {
@@ -35,8 +38,9 @@ class OfficeReviewController extends Controller
         return view('revision.pending', [
             'records' => $records,
             'summary' => $summary,
-            'convocations' => $this->convocations(),
+            'convocations' => $this->convocations(true),
             'services' => $this->services(),
+            'activeConvocationsOnly' => true,
         ]);
     }
 
@@ -50,8 +54,10 @@ class OfficeReviewController extends Controller
             'path' => $request->url(), 'query' => $request->query(),
         ]);
         $records->getCollection()->each(function ($record) use ($resultPdf, $evaluation): void {
-            $record->resultado_pdf_disponible = $record->origen === 'historico'
-                && $resultPdf->historical((int) $record->id, (int) $record->designado === 1) !== null;
+            $record->resultado_pdf_disponible = $record->origen === 'actual'
+                ? $record->estado === 'Finalizado'
+                    && in_array($record->decision, ['designado', 'no_designado', 'no_aceptado'], true)
+                : $resultPdf->historical((int) $record->id, (int) $record->designado === 1) !== null;
             $service = (int) $record->legacy_servicio_id;
             $record->evaluacion_pdf_disponible = $record->estado === 'Finalizado'
                 && in_array($service, [3, 4], true)
@@ -69,7 +75,8 @@ class OfficeReviewController extends Controller
         ]);
     }
 
-    public function show(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles, FinalEvaluationReport $evaluation): View
+    public function show(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles,
+        FinalEvaluationReport $evaluation, ResultNotifications $notifications): View
     {
         $registration = $this->localRecords()->where('registro.id', $record)->first();
         abort_unless($registration, 404);
@@ -94,7 +101,13 @@ class OfficeReviewController extends Controller
             && in_array((int) $registration->legacy_servicio_id, [3, 4], true)
             && $evaluation->source('actual', $record, $service) !== null;
 
-        return view('revision.show', compact('registration', 'prices', 'files', 'finalEvaluationAvailable'));
+        $canNotify = $registration->estado === 'Finalizado' && ! $menu->isContestant($request->user())
+            && $menu->allows($request->user(), 'gestionOficio');
+        $notificationRows = $canNotify ? $notifications->status($record) : collect();
+        $notificationReady = $canNotify && $notifications->ready();
+
+        return view('revision.show', compact('registration', 'prices', 'files',
+            'finalEvaluationAvailable', 'canNotify', 'notificationRows', 'notificationReady'));
     }
 
     public function historical(int $record, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles, FinishedResultPdf $resultPdf, FinalEvaluationReport $evaluation): View
@@ -173,6 +186,32 @@ class OfficeReviewController extends Controller
         return $evaluation->pdf($item, $source, $prevaluations->detail($item), $request->user());
     }
 
+    public function localResultLetterPdf(int $record, Request $request, LegacyMenu $menu,
+        ResultLetterPdf $letter): Response
+    {
+        $registration = $this->localRecords()->where('registro.id', $record)
+            ->where('registro.estado', 'Finalizado')->first();
+        abort_unless($registration && in_array($registration->decision,
+            ['designado', 'no_designado', 'no_aceptado'], true), 404);
+        $this->authorizeRecord($request, $menu, (int) $registration->usu_id, 'Finalizado');
+
+        $bytes = $letter->render($registration);
+        $filename = match ($registration->decision) {
+            'designado' => 'Carta_Designacion',
+            'no_aceptado' => 'Carta_No_Aceptado',
+            default => 'Carta_No_Designado',
+        };
+        $response = response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'_'.$registration->folio.'.pdf"',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+        $response->setPrivate();
+        $response->headers->addCacheControlDirective('no-store');
+
+        return $response;
+    }
+
     public function historicalResultPdf(int $record, Request $request, LegacyMenu $menu, FinishedResultPdf $resultPdf): BinaryFileResponse
     {
         $registration = DB::connection('legacy')->table('tm_documento')->where('doc_id', $record)
@@ -195,7 +234,8 @@ class OfficeReviewController extends Controller
         return $response;
     }
 
-    public function finish(int $record, Request $request, LegacyMenu $menu): RedirectResponse
+    public function finish(int $record, Request $request, LegacyMenu $menu,
+        ResultNotifications $notifications): RedirectResponse
     {
         abort_unless(! $menu->isContestant($request->user())
             && $menu->allows($request->user(), 'gestionOficio'), 403);
@@ -221,22 +261,77 @@ class OfficeReviewController extends Controller
         ]);
         abort_unless($changed, 409, 'Esta propuesta ya fue finalizada.');
 
-        return redirect()->route('revision.finished')->with('status', 'La propuesta quedó finalizada.');
+        try {
+            $delivery = $notifications->dispatch($record);
+            $notice = $delivery['failed'] > 0
+                ? 'La propuesta quedó finalizada. Algunos correos fallaron; revisa las notificaciones del expediente.'
+                : ($delivery['pending'] > 0
+                    ? 'La propuesta quedó finalizada. Los correos están pendientes hasta configurar el envío real.'
+                    : 'La propuesta quedó finalizada y se enviaron las notificaciones.');
+            if ($delivery['warnings']) $notice .= ' '.implode(' ', $delivery['warnings']);
+        } catch (Throwable $error) {
+            report($error);
+            $notice = 'La propuesta quedó finalizada. No se pudieron preparar los correos: '.$error->getMessage();
+        }
+
+        return redirect()->route('revision.finished')->with('status', $notice);
     }
 
-    public function rejectBulk(Request $request, LegacyMenu $menu): RedirectResponse
+    public function notify(int $record, Request $request, LegacyMenu $menu,
+        ResultNotifications $notifications): RedirectResponse
     {
         abort_unless(! $menu->isContestant($request->user())
             && $menu->allows($request->user(), 'gestionOficio'), 403);
-        $data = $request->validate([
+        abort_unless(DB::table('ccyf_registros')->where('id', $record)
+            ->where('estado', 'Finalizado')->exists(), 404);
+
+        try {
+            $delivery = $notifications->dispatch($record);
+            $notice = $delivery['failed'] > 0
+                ? 'Algunos correos fallaron. Revisa el estado de cada destinatario.'
+                : ($delivery['pending'] > 0
+                    ? 'El envío sigue pendiente de una configuración de correo real.'
+                    : ($delivery['sent'] > 0 ? 'Correos enviados.' : 'Los correos ya estaban enviados.'));
+            if ($delivery['warnings']) $notice .= ' '.implode(' ', $delivery['warnings']);
+        } catch (Throwable $error) {
+            report($error);
+            $notice = 'No se pudieron preparar los correos: '.$error->getMessage();
+        }
+
+        return redirect()->route('revision.show', $record)->with('status', $notice);
+    }
+
+    public function finishBulk(Request $request, LegacyMenu $menu,
+        ResultNotifications $notifications): RedirectResponse
+    {
+        return $this->completeBulk($request, $menu, $notifications);
+    }
+
+    public function rejectBulk(Request $request, LegacyMenu $menu,
+        ResultNotifications $notifications): RedirectResponse
+    {
+        return $this->completeBulk($request, $menu, $notifications, 'no_aceptado');
+    }
+
+    private function completeBulk(Request $request, LegacyMenu $menu,
+        ResultNotifications $notifications, ?string $forcedDecision = null): RedirectResponse
+    {
+        abort_unless(! $menu->isContestant($request->user())
+            && $menu->allows($request->user(), 'gestionOficio'), 403);
+        $rules = [
             'registros' => ['required', 'array', 'min:1', 'max:100'],
             'registros.*' => ['required', 'integer', 'distinct'],
             'respuesta' => ['required', 'string', 'max:250'],
-        ]);
+        ];
+        if ($forcedDecision === null) {
+            $rules['decision'] = ['required', Rule::in(['no_aceptado', 'no_designado'])];
+        }
+        $data = $request->validate($rules);
+        $decision = $forcedDecision ?? $data['decision'];
         $ids = array_map('intval', $data['registros']);
-        DB::transaction(function () use ($ids, $data, $request): void {
+        DB::transaction(function () use ($ids, $data, $decision, $request): void {
             $changed = DB::table('ccyf_registros')->whereIn('id', $ids)->where('estado', 'Recibido')->update([
-                'estado' => 'Finalizado', 'decision' => 'no_aceptado',
+                'estado' => 'Finalizado', 'decision' => $decision,
                 'respuesta' => trim($data['respuesta']), 'revisado_por' => $request->user()->getKey(),
                 'finalizado_at' => now(), 'updated_at' => now(),
             ]);
@@ -245,7 +340,31 @@ class OfficeReviewController extends Controller
             }
         });
 
-        return redirect()->route('revision.finished')->with('status', count($ids).' propuestas finalizadas como no aceptadas.');
+        $sent = 0;
+        $pending = 0;
+        $failed = 0;
+        foreach ($ids as $id) {
+            try {
+                $delivery = $notifications->dispatch($id);
+                $sent += $delivery['sent'];
+                $pending += $delivery['pending'];
+                $failed += $delivery['failed'];
+            } catch (Throwable $error) {
+                report($error);
+                $failed++;
+            }
+        }
+
+        $label = $decision === 'no_aceptado'
+            ? (count($ids) === 1 ? 'no aceptada' : 'no aceptadas')
+            : (count($ids) === 1 ? 'no designada' : 'no designadas');
+        $notice = count($ids).' '.(count($ids) === 1 ? 'propuesta finalizada' : 'propuestas finalizadas')
+            .' como '.$label.'.';
+        if ($sent > 0) $notice .= ' '.$sent.' '.($sent === 1 ? 'correo enviado.' : 'correos enviados.');
+        if ($pending > 0) $notice .= ' '.$pending.' '.($pending === 1 ? 'correo pendiente' : 'correos pendientes').' de configurar el envío real.';
+        if ($failed > 0) $notice .= ' '.$failed.' '.($failed === 1 ? 'notificación requiere' : 'notificaciones requieren').' revisión en cada expediente.';
+
+        return redirect()->route('revision.finished')->with('status', $notice);
     }
 
     public function file(int $record, int $file, Request $request, LegacyMenu $menu, DocumentFiles $documentFiles): BinaryFileResponse
@@ -292,9 +411,11 @@ class OfficeReviewController extends Controller
             ->join('ccyf_convocatorias as convocatoria', 'convocatoria.id', '=', 'registro.convocatoria_id')
             ->join('ccyf_tipos_servicio as servicio', 'servicio.id', '=', 'registro.servicio_id')
             ->join('ccyf_planteles as plantel', 'plantel.id', '=', 'registro.plantel_id')
+            ->leftJoin('ccyf_usuarios as usuario', 'usuario.usu_id', '=', 'registro.usu_id')
             ->select('registro.*', 'convocatoria.numero as convocatoria_nombre',
                 'servicio.nombre as servicio_nombre', 'servicio.legacy_trami_id as legacy_servicio_id',
-                'plantel.nombre as plantel_nombre');
+                'plantel.nombre as plantel_nombre',
+                'usuario.usu_correo as correo', 'usuario.usu_telf as telefono');
     }
 
     private function applyFilters($query, Request $request): void

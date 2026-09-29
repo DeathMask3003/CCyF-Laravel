@@ -20,8 +20,14 @@
     .result { text-align: center; color: white; background: #8c2236; font-weight: bold; padding: 9px; font-size: 10pt; }
     .note { border: 1px solid #ded4d7; background: #fbf8f9; padding: 9px; line-height: 1.45; }
     .source { color: #6e6469; font-size: 7pt; margin-top: 13px; }
-    .next-page { page-break-before: always; }
     .result-block { page-break-inside: avoid; }
+    @if ($record->servicio === 'fotocopiado')
+    .subtitle { margin-bottom: 6px; }
+    h2 { padding: 4px 6px; margin-top: 7px; }
+    th, td { padding: 3px 5px; }
+    .result { padding: 5px; }
+    .source { margin-top: 5px; }
+    @endif
 </style>
 <h1>HOJA FINAL DE EVALUACIÓN DE DOCUMENTACIÓN</h1>
 <div class="subtitle">SERVICIO DE {{ $service }}</div>
@@ -46,7 +52,10 @@
     </tbody>
 </table>
 
-<h2 class="{{ $detail['documents']->count() + $detail['prices']->count() > 23 ? 'next-page' : '' }}">EVALUACIÓN DE PRECIOS DE {{ $record->servicio === 'cafeteria' ? 'ALIMENTOS' : 'FOTOCOPIADO' }}</h2>
+<h2>EVALUACIÓN DE PRECIOS DE {{ $record->servicio === 'cafeteria' ? 'ALIMENTOS' : 'FOTOCOPIADO' }}</h2>
+@if ($record->servicio === 'cafeteria')
+    @include('prevaluaciones.price-columns', ['prices' => $detail['prices'], 'items' => $detail['items'], 'rating' => $status])
+@else
 <table>
     <thead><tr><th width="5%">N.º</th><th width="33%">{{ $record->servicio === 'cafeteria' ? 'Producto' : 'Servicio' }}</th><th width="14%">Precio</th><th width="16%">Estado</th><th width="32%">Observaciones</th></tr></thead>
     <tbody>
@@ -58,6 +67,7 @@
     @endforelse
     </tbody>
 </table>
+@endif
 
 <div class="result-block">
     <h2>RESULTADO DE VIABILIDAD</h2>

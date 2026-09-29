@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use App\Support\LegacyTimestamps;
 
 class DocumentTypes
 {
@@ -24,8 +25,7 @@ class DocumentTypes
                     'nombre' => $type->tipo_nom,
                     'nombre_clave' => mb_strtolower(trim($type->tipo_nom)),
                     'activo' => (bool) $type->est,
-                    'created_at' => $type->fech_crea ?: now(),
-                    'updated_at' => $type->fech_modif ?: ($type->fech_crea ?: now()),
+                    ...LegacyTimestamps::from($type),
                 ]);
                 $imported++;
             }
