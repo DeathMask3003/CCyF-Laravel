@@ -10,8 +10,6 @@ class LegacyUser extends Authenticatable
 {
     use Notifiable;
 
-    protected $connection = 'sqlite';
-
     protected $table = 'ccyf_usuarios';
 
     protected $primaryKey = 'usu_id';
