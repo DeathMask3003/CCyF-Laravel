@@ -15,6 +15,6 @@ El correo local usa `MAIL_MAILER=log`, por lo que las pruebas no envían correos
 
 ## Producción
 
-El despliegue usará la base MySQL de producción existente y los expedientes históricos de producción. **No se trasladarán los registros ni archivos de prueba locales.** Git publica únicamente el código; la base y los archivos se respaldan y preparan por separado. La secuencia y las verificaciones pendientes están en [la guía de despliegue](docs/DESPLIEGUE_PRODUCCION.md).
+La instalación inicial en Windows Server usará `ccyflaravel`, una copia de la base de producción, y los expedientes históricos copiados desde el servidor original. **No se trasladarán los registros ni archivos de prueba locales.** Git publica únicamente el código; la base y los archivos se respaldan y preparan por separado. La secuencia y las verificaciones pendientes están en [la guía de despliegue](docs/DESPLIEGUE_PRODUCCION.md).
 
 El [registro de migración](docs/MIGRACION.md) describe decisiones de la fase local inicial; no sustituye la guía de despliegue en producción.
