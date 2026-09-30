@@ -6,7 +6,12 @@ class ProductionIntegrations
 {
     public function turnstile(): bool
     {
-        return config('app.env') === 'production' && (bool) config('ccyf.turnstile.enabled');
+        $environment = config('app.env');
+        $appUrl = rtrim((string) config('app.url'), '/');
+
+        return in_array($environment, ['staging', 'production'], true)
+            && (bool) config('ccyf.turnstile.enabled')
+            && ($environment === 'production' || str_starts_with($appUrl, 'https://'));
     }
 
     public function google(): bool

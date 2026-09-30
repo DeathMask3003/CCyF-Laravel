@@ -1,10 +1,10 @@
 # Activación de Turnstile y Google en producción
 
-Ambas integraciones están apagadas de forma predeterminada. El código exige `APP_ENV=production` además del interruptor individual. En desarrollo y pruebas locales no se muestra el widget de Turnstile ni el acceso con Google, aunque se configuren claves por accidente.
+Ambas integraciones están apagadas de forma predeterminada. En `staging` pueden habilitarse explícitamente para el dominio HTTPS de pruebas. En `local` permanecen apagadas aunque se configuren claves por accidente.
 
 ## Turnstile
 
-1. Crear un widget para el dominio público de CCyF en Cloudflare y obtener su clave pública y secreta.
+1. Crear widgets separados para el dominio de pruebas y el dominio público de CCyF en Cloudflare. Verificar el primero en `staging` antes de usar las claves del segundo en producción.
 2. Configurar `APP_URL` con la URL HTTPS pública exacta. El servidor compara el `hostname` de la respuesta de Cloudflare con ese dominio y comprueba la acción `login`, `register` o `submit_registration`.
 3. Establecer `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` y `CCYF_TURNSTILE_ENABLED=true` en el entorno de producción.
 4. Limpiar la caché de configuración y probar el inicio de sesión, alta de cuenta y envío final de un registro. Guardar un borrador no exige captcha.

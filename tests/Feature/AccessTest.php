@@ -109,6 +109,33 @@ class AccessTest extends TestCase
         $this->assertAuthenticated();
     }
 
+    public function test_turnstile_can_be_tested_on_https_staging_but_stays_off_on_http(): void
+    {
+        config()->set('app.env', 'staging');
+        config()->set('app.url', 'https://pruebas.cobaemex.edu.mx');
+        config()->set('ccyf.turnstile.enabled', true);
+        config()->set('ccyf.turnstile.site_key', 'staging-site');
+        config()->set('ccyf.turnstile.secret_key', 'staging-secret');
+
+        $this->get('/acceso')->assertSee('cf-turnstile');
+        $this->post('/acceso', ['email' => 'prueba@example.test', 'password' => 'clave-prueba'])
+            ->assertSessionHasErrors('cf-turnstile-response');
+
+        Http::fake(['challenges.cloudflare.com/*' => Http::response([
+            'success' => true,
+            'action' => 'login',
+            'hostname' => 'pruebas.cobaemex.edu.mx',
+        ])]);
+        $this->post('/acceso', [
+            'email' => 'prueba@example.test',
+            'password' => 'clave-prueba',
+            'cf-turnstile-response' => 'staging-token',
+        ])->assertRedirect('/panel');
+
+        config()->set('app.url', 'http://pruebas.cobaemex.edu.mx');
+        $this->get('/acceso')->assertDontSee('cf-turnstile');
+    }
+
     public function test_google_sign_in_links_a_verified_gmail_account_by_stable_id(): void
     {
         config()->set('app.env', 'production');

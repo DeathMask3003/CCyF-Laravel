@@ -20,4 +20,25 @@ El código permite Google en `staging` solo cuando el sitio usa HTTPS, hay crede
 2. Colocar `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_REDIRECT_URI` en el `.env` del servidor. Pueden utilizarse credenciales de un cliente OAuth autorizado para este dominio; no incluirlas en Git ni enviarlas por chat. Poner `CCYF_GOOGLE_LOGIN_ENABLED=true` y ejecutar `C:\xampp\php\php.exe artisan optimize:clear`.
 3. Abrir el dominio principal de pruebas y probar Google con una cuenta ya existente de CCyF. La aplicación vincula únicamente cuentas activas con correo verificado y coincidencia única. Si se usa una pantalla de consentimiento en modo de pruebas, incluir allí a las cuentas que participarán en el ensayo.
 
-El correo continúa en `MAIL_MAILER=log`: ninguna prueba debe enviar notificaciones reales a permisionarios.
+## Preparar correo y Turnstile sin avisar a los usuarios de la copia
+
+El CCyF original usa `smtp.office365.com`, puerto `587` y TLS. En el `.env` de este servidor se pueden completar `MAIL_SCHEME=smtp`, `MAIL_HOST=smtp.office365.com`, `MAIL_PORT=587`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` y `MAIL_FROM_NAME="CCyF"`. El remitente debe ser la misma cuenta autenticada o una dirección para la que esa cuenta tenga permiso de envío. La cuenta y su clave se configuran únicamente en el servidor. Mantener **`MAIL_MAILER=log`** durante el ensayo: los avisos automáticos generados desde la copia de producción no llegarán a sus destinatarios reales.
+
+Una vez configurado SMTP, comprobarlo con un único destinatario de control, elegido expresamente:
+
+```powershell
+& 'C:\xampp\php\php.exe' artisan optimize:clear
+& 'C:\xampp\php\php.exe' artisan ccyf:mail-test 'correo-de-control@dominio.example'
+```
+
+El comando usa SMTP solo para ese mensaje; no cambia `MAIL_MAILER`. Un resultado satisfactorio confirma que el servidor de correo aceptó el mensaje. Hay que verificar también que llegó al buzón. Si falla, revisar `storage/logs/laravel.log` sin compartir contraseñas ni el `.env`.
+
+Para ensayar Turnstile, crear en Cloudflare un widget para `pruebas.cobaemex.edu.mx` y otro para `ccyf.cobaemex.edu.mx`. Colocar **solo las claves del primero** en el `.env` de pruebas:
+
+```dotenv
+CCYF_TURNSTILE_ENABLED=true
+TURNSTILE_SITE_KEY=clave_publica_de_pruebas
+TURNSTILE_SECRET_KEY=clave_secreta_de_pruebas
+```
+
+Ejecutar `artisan optimize:clear` y comprobar acceso con contraseña, registro de cuenta y envío final de un expediente. Turnstile permanece apagado en `local`; en `staging` requiere HTTPS y la activación explícita. La validación del servidor exige el hostname y la acción correctos. **No usar claves de prueba universales de Cloudflare para esta prueba funcional**, ya que la aplicación comprueba también esos campos. Para desactivarlo, establecer `CCYF_TURNSTILE_ENABLED=false` y limpiar la caché. Guardar las claves del widget de producción para el cambio final.
