@@ -18,9 +18,18 @@ class ResultNotifications
 
     public function ready(): bool
     {
-        return ! in_array(config('mail.default'), ['log', 'array', 'failover', 'roundrobin'], true)
-            && filter_var(config('mail.from.address'), FILTER_VALIDATE_EMAIL)
-            && ! str_ends_with((string) config('mail.from.address'), '@example.com');
+        if (! filter_var(config('mail.from.address'), FILTER_VALIDATE_EMAIL)
+            || str_ends_with((string) config('mail.from.address'), '@example.com')) {
+            return false;
+        }
+        if (config('app.env') === 'staging') {
+            $smtp = config('mail.mailers.smtp');
+            return filled($smtp['host'] ?? null) && filled($smtp['port'] ?? null)
+                && filled($smtp['username'] ?? null) && filled($smtp['password'] ?? null)
+                && $this->stagingRecipients() !== [];
+        }
+
+        return ! in_array(config('mail.default'), ['log', 'array', 'failover', 'roundrobin'], true);
     }
 
     public function status(int $recordId)
@@ -49,6 +58,7 @@ class ResultNotifications
                     filter_var($mail, FILTER_VALIDATE_EMAIL)
                     && mb_strtolower($mail) !== mb_strtolower((string) config('ccyf.mail_legal'))))),
                 'parts' => $this->parts($documents)];
+            $audiences['accounting'] = ['to' => config('ccyf.mail_accounting'), 'cc' => [], 'parts' => [[]]];
         } else {
             $audiences['participant']['cc'] = filter_var(config('ccyf.mail_ccyf'), FILTER_VALIDATE_EMAIL)
                 ? [config('ccyf.mail_ccyf')] : [];
@@ -77,8 +87,8 @@ class ResultNotifications
                     $failed++;
                     continue;
                 }
-                if (! $this->ready()) {
-                    $this->mark($row->id, 'pending', 'Configura un transporte de correo real para enviar.');
+                if (! $this->canSendTo($recipients['to'])) {
+                    $this->mark($row->id, 'pending', 'El envío está desactivado o este destinatario no está autorizado en pruebas.');
                     $pending++;
                     continue;
                 }
@@ -94,7 +104,9 @@ class ResultNotifications
                 }
                 try {
                     $letter ??= $this->letter->render($record);
-                    Mail::to($recipients['to'])->cc($recipients['cc'])
+                    $cc = array_values(array_filter($recipients['cc'], fn ($email) => $this->canSendTo($email)));
+                    $mailer = config('app.env') === 'staging' ? Mail::mailer('smtp') : Mail::mailer(config('mail.default'));
+                    $mailer->to($recipients['to'])->cc($cc)
                         ->send(new DecisionNotice($record, $audience, $part, $letter,
                             $number, count($recipients['parts'])));
                     DB::table('ccyf_result_mailings')->where('id', $row->id)->update([
@@ -197,5 +209,17 @@ class ResultNotifications
         DB::table('ccyf_result_mailings')->where('id', $id)->update([
             'status' => $status, 'last_error' => $error, 'updated_at' => now(),
         ]);
+    }
+
+    private function canSendTo(string $recipient): bool
+    {
+        return $this->ready() && (config('app.env') !== 'staging'
+            || in_array(mb_strtolower($recipient), $this->stagingRecipients(), true));
+    }
+
+    private function stagingRecipients(): array
+    {
+        return array_map('mb_strtolower', preg_split('/\s*,\s*/',
+            (string) config('ccyf.staging_result_smtp_emails'), -1, PREG_SPLIT_NO_EMPTY));
     }
 }

@@ -804,7 +804,7 @@ class PriceCatalogTest extends TestCase
             'fecha_fin_confirmada' => '1', 'monto' => '1200.50',
         ])->assertRedirect('/convocatorias-finalizadas');
 
-        Mail::assertSent(DecisionNotice::class, 2);
+        Mail::assertSent(DecisionNotice::class, 3);
         Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
             return $mail->audience === 'participant' && $mail->hasTo('persona@example.test')
                 && count($mail->attachments()) === 1;
@@ -820,12 +820,23 @@ class PriceCatalogTest extends TestCase
                 && count($attachments) === $requirements->count() + 1
                 && str_starts_with($mail->letter, '%PDF-');
         });
+        Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
+            return $mail->audience === 'accounting'
+                && $mail->hasTo('depto.contabilidad@cobaemex.edu.mx')
+                && count($mail->documents) === 0
+                && count($mail->attachments()) === 1
+                && str_starts_with($mail->letter, '%PDF-');
+        });
         $this->assertDatabaseHas('ccyf_result_mailings', [
             'registro_id' => $record, 'audience' => 'internal', 'status' => 'sent',
             'attachment_count' => $requirements->count() + 1,
         ]);
+        $this->assertDatabaseHas('ccyf_result_mailings', [
+            'registro_id' => $record, 'audience' => 'accounting', 'status' => 'sent',
+            'attachment_count' => 1,
+        ]);
         $this->post("/expedientes/{$record}/notificar")->assertRedirect("/expedientes/{$record}");
-        Mail::assertSent(DecisionNotice::class, 2);
+        Mail::assertSent(DecisionNotice::class, 3);
     }
 
     public function test_log_mailer_keeps_designation_pending_until_real_delivery_is_configured(): void
@@ -851,14 +862,64 @@ class PriceCatalogTest extends TestCase
             'fecha_fin_confirmada' => '1', 'monto' => '1200.50',
         ])->assertRedirect('/convocatorias-finalizadas');
         Mail::assertNothingSent();
-        $this->assertDatabaseCount('ccyf_result_mailings', 2);
+        $this->assertDatabaseCount('ccyf_result_mailings', 3);
         $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'internal', 'status' => 'pending']);
+        $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'accounting', 'status' => 'pending']);
 
         config()->set('mail.default', 'smtp');
         config()->set('mail.from.address', 'ccyf@cobaemex.edu.mx');
         $this->post("/expedientes/{$record}/notificar")->assertRedirect("/expedientes/{$record}");
-        Mail::assertSent(DecisionNotice::class, 2);
+        Mail::assertSent(DecisionNotice::class, 3);
         $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'internal', 'status' => 'sent']);
+        $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'accounting', 'status' => 'sent']);
+    }
+
+    public function test_staging_result_mail_sends_only_to_authorized_addresses(): void
+    {
+        Storage::fake('local');
+        Mail::fake();
+        config()->set('app.env', 'staging');
+        config()->set('mail.default', 'log');
+        config()->set('mail.from.address', 'ccyf@cobaemex.edu.mx');
+        config()->set('mail.mailers.smtp.host', 'smtp.office365.com');
+        config()->set('mail.mailers.smtp.port', 587);
+        config()->set('mail.mailers.smtp.username', 'ccyf@cobaemex.edu.mx');
+        config()->set('mail.mailers.smtp.password', 'test-secret');
+        config()->set('ccyf.staging_result_smtp_emails', 'persona@example.test,depto.contabilidad@cobaemex.edu.mx');
+        $record = $this->reviewRecord();
+        $requirement = app(RegistrationRequirements::class)->activeFor(1)->first();
+        $path = "ccyf/registros/{$record}/{$requirement->clave}.pdf";
+        Storage::disk('local')->put($path, '%PDF-1.4 test');
+        DB::table('ccyf_registro_archivos')->insert([
+            'registro_id' => $record, 'requisito_id' => $requirement->id,
+            'nombre_original' => $requirement->clave.'.pdf', 'ruta' => $path,
+            'mime' => 'application/pdf', 'bytes' => 13,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->asUser(1);
+        $this->post("/expedientes/{$record}/finalizar", [
+            'decision' => 'designado', 'respuesta' => 'Se designa al participante.',
+            'fecha_inicio' => '2026-10-01', 'fecha_fin' => '2027-09-30',
+            'fecha_fin_confirmada' => '1', 'monto' => '1200.50',
+        ])->assertRedirect('/convocatorias-finalizadas');
+
+        Mail::assertSent(DecisionNotice::class, 2);
+        Mail::assertSent(DecisionNotice::class, fn (DecisionNotice $mail): bool =>
+            $mail->audience === 'accounting' && $mail->hasTo('depto.contabilidad@cobaemex.edu.mx')
+            && count($mail->attachments()) === 1);
+        $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'internal', 'status' => 'pending']);
+        $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'participant', 'status' => 'sent']);
+        $this->assertDatabaseHas('ccyf_result_mailings', ['audience' => 'accounting', 'status' => 'sent']);
+
+        config()->set('ccyf.staging_result_smtp_emails', 'persona@example.test,depto.contabilidad@cobaemex.edu.mx,unidad.juridica@cobaemex.edu.mx');
+        $this->post("/expedientes/{$record}/notificar")->assertRedirect("/expedientes/{$record}");
+        Mail::assertSent(DecisionNotice::class, 3);
+        Mail::assertSent(DecisionNotice::class, fn (DecisionNotice $mail): bool =>
+            $mail->audience === 'internal' && $mail->hasTo('unidad.juridica@cobaemex.edu.mx')
+            && ! $mail->hasCc('atlacomulco@cobaemex.edu.mx')
+            && ! $mail->hasCc('cafeteria.fotocopiado@cobaemex.edu.mx')
+            && count($mail->attachments()) === 2);
     }
 
     public function test_pending_convocation_filter_shows_only_active_options(): void

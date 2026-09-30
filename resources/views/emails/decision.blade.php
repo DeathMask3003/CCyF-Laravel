@@ -4,8 +4,8 @@
 <div style="max-width:640px;margin:24px auto;background:#fff;border:1px solid #e8dde1;border-radius:14px;overflow:hidden">
     <div style="padding:22px 28px;background:#611232;color:#fff"><strong style="font-size:18px">CCyF · CoBaEMex</strong><div style="margin-top:5px;color:#ead1db;font-size:13px">Resultado del concurso de cafetería y fotocopiado</div></div>
     <div style="padding:28px">
-        <p style="margin-top:0">{{ $audience === 'internal' ? 'A la Unidad Jurídica y áreas involucradas:' : 'Estimada persona participante:' }}</p>
-        <p>{{ $audience === 'internal' ? 'Se remite el resultado y la documentación del expediente indicado.' : 'Ya se registró el resultado de su participación en la convocatoria.' }}</p>
+        <p style="margin-top:0">{{ match ($audience) { 'internal' => 'A la Unidad Jurídica y áreas involucradas:', 'accounting' => 'Al Departamento de Presupuesto y Contabilidad:', default => 'Estimada persona participante:' } }}</p>
+        <p>{{ match ($audience) { 'internal' => 'Se remite la carta de designación y la documentación del expediente indicado.', 'accounting' => 'Se remite la carta de designación del expediente indicado para su conocimiento.', default => 'Ya se registró el resultado de su participación en la convocatoria.' } }}</p>
         <table role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0">
             <tr><td style="padding:8px;border-bottom:1px solid #eee4e8;color:#806875">Folio</td><td style="padding:8px;border-bottom:1px solid #eee4e8"><strong>{{ $record->folio }}</strong></td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee4e8;color:#806875">Permisionario</td><td style="padding:8px;border-bottom:1px solid #eee4e8">{{ $record->solicitante }}</td></tr>

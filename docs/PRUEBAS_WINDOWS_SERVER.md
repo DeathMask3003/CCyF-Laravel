@@ -46,6 +46,8 @@ Después de `artisan migrate --force`, se puede consultar un folio y reintentar 
 
 El primer comando muestra destinatarios y estados sin enviar nada. El segundo no reenvía los avisos ya aceptados por SMTP. Que SMTP acepte un mensaje no confirma su entrega al buzón; revisar también ambos buzones.
 
+Los avisos de **resultado** mantienen `MAIL_MAILER=log` en pruebas. Para ensayar un resultado con SMTP, agrega en `.env` únicamente los correos concretos autorizados a `CCYF_STAGING_RESULT_SMTP_EMAILS`, separados por comas, y limpia la caché con `artisan optimize:clear`. Cada destinatario principal fuera de la lista queda pendiente; los correos en copia fuera de la lista se omiten. Al designar, la persona participante recibe la carta; Unidad Jurídica recibe carta y documentos con copia al plantel, a `CCYF_MAIL_MANAGEMENT` y a CCyF; Contabilidad (`CCYF_MAIL_ACCOUNTING`) recibe un mensaje independiente con solo la carta. Para no aceptado o no designado, la persona participante recibe la carta respectiva con copia a CCyF. En producción se requiere `MAIL_MAILER=smtp`; confirma antes los cinco destinatarios configurados y el correo del plantel.
+
 Para ensayar Turnstile, crear en Cloudflare un widget para `pruebas.cobaemex.edu.mx` y otro para `ccyf.cobaemex.edu.mx`. Colocar **solo las claves del primero** en el `.env` de pruebas:
 
 ```dotenv

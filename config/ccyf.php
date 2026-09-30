@@ -9,6 +9,7 @@ return [
     'google_login_enabled' => (bool) env('CCYF_GOOGLE_LOGIN_ENABLED', false),
     'staging_recovery_smtp_emails' => env('CCYF_STAGING_RECOVERY_SMTP_EMAILS', ''),
     'staging_registration_smtp_emails' => env('CCYF_STAGING_REGISTRATION_SMTP_EMAILS', ''),
+    'staging_result_smtp_emails' => env('CCYF_STAGING_RESULT_SMTP_EMAILS', ''),
     'legacy_root' => env('CCYF_LEGACY_ROOT'),
     'legacy_password_key' => env('CCYF_LEGACY_PASSWORD_KEY'),
     'expected_tables' => [
@@ -31,5 +32,6 @@ return [
     'mail_legal' => env('CCYF_MAIL_LEGAL', 'unidad.juridica@cobaemex.edu.mx'),
     'mail_management' => env('CCYF_MAIL_MANAGEMENT', 'mda@cobaemex.edu.mx'),
     'mail_ccyf' => env('CCYF_MAIL_CCYF', 'cafeteria.fotocopiado@cobaemex.edu.mx'),
+    'mail_accounting' => env('CCYF_MAIL_ACCOUNTING', 'depto.contabilidad@cobaemex.edu.mx'),
     'legacy_complaints_root' => env('CCYF_LEGACY_COMPLAINTS_ROOT', dirname(base_path()).DIRECTORY_SEPARATOR.'ccyf'.DIRECTORY_SEPARATOR.'assets'.DIRECTORY_SEPARATOR.'quejas'),
 ];
