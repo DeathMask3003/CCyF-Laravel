@@ -4,9 +4,14 @@ namespace App\Notifications;
 
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Notifications\Messages\MailMessage;
+use Symfony\Component\Mime\Email;
+use Symfony\Component\Mime\Part\DataPart;
+use Symfony\Component\Mime\Part\File;
 
 class CcyfResetPassword extends ResetPassword
 {
+    private const HEADER_CID = 'cabecera-institucional@ccyf.cobaemex.edu.mx';
+
     public function toMail($notifiable): MailMessage
     {
         $url = route('password.reset', [
@@ -15,12 +20,20 @@ class CcyfResetPassword extends ResetPassword
         ]);
 
         $message = (new MailMessage)
-            ->subject('Restablece tu contraseña de CCyF')
-            ->greeting('Hola, '.$notifiable->usu_area)
-            ->line('Recibimos una solicitud para restablecer la contraseña de tu cuenta de CCyF.')
-            ->action('Restablecer contraseña', $url)
-            ->line('Este enlace vence en '.config('auth.passwords.users.expire').' minutos.')
-            ->line('Si no solicitaste el cambio, puedes ignorar este mensaje.');
+            ->subject('Restablece tu contraseña | CCyF')
+            ->view(['html' => 'emails.password-reset', 'text' => 'emails.password-reset-text'], [
+                'recipientName' => (string) $notifiable->usu_area,
+                'resetUrl' => $url,
+                'expiresInMinutes' => (int) config('auth.passwords.users.expire'),
+                'institutionalHeaderCid' => 'cid:'.self::HEADER_CID,
+            ])
+            ->withSymfonyMessage(function (Email $email): void {
+                $email->addPart((new DataPart(
+                    new File(resource_path('images/cabezera.png')),
+                    'cabecera-institucional.png',
+                    'image/png',
+                ))->asInline()->setContentId(self::HEADER_CID));
+            });
 
         if (config('app.env') === 'staging' && config('mail.default') === 'log') {
             $allowed = array_map('mb_strtolower', preg_split('/\s*,\s*/',

@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as GoogleUser;
+use Symfony\Component\Mime\Email;
 use Tests\TestCase;
 
 class AccessTest extends TestCase
@@ -350,6 +351,27 @@ class AccessTest extends TestCase
         config()->set('app.env', 'local');
         config()->set('ccyf.staging_recovery_smtp_emails', 'prueba@example.test');
         $this->assertNull((new CcyfResetPassword('token'))->toMail($user)->mailer);
+    }
+
+    public function test_recovery_mail_is_in_spanish_with_an_inline_institutional_header(): void
+    {
+        $message = (new CcyfResetPassword('test-token'))->toMail(LegacyUser::findOrFail(7));
+        $html = view($message->view['html'], $message->viewData)->render();
+        $plain = view($message->view['text'], $message->viewData)->render();
+
+        $this->assertStringContainsString('Restablece tu contraseña', $html);
+        $this->assertStringContainsString('cid:cabecera-institucional@ccyf.cobaemex.edu.mx', $html);
+        $this->assertStringContainsString('Gobierno del Estado de México', $html);
+        $this->assertStringContainsString('Si no solicitaste este cambio', $plain);
+        $this->assertStringNotContainsString('Regards', $html);
+
+        $email = new Email;
+        foreach ($message->callbacks as $callback) {
+            $callback($email);
+        }
+        $this->assertCount(1, $email->getAttachments());
+        $this->assertSame('cabecera-institucional@ccyf.cobaemex.edu.mx', $email->getAttachments()[0]->getContentId());
+        $this->assertSame('inline', $email->getAttachments()[0]->getDisposition());
     }
 
     public function test_recovery_reports_mail_failure_without_server_error(): void
