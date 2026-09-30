@@ -837,6 +837,16 @@ class PriceCatalogTest extends TestCase
         ]);
         $this->post("/expedientes/{$record}/notificar")->assertRedirect("/expedientes/{$record}");
         Mail::assertSent(DecisionNotice::class, 3);
+
+        // Un resultado anterior ya notificado debe poder preparar solo el nuevo aviso a Contabilidad.
+        DB::table('ccyf_result_mailings')->where('registro_id', $record)
+            ->where('audience', 'accounting')->delete();
+        $this->get("/expedientes/{$record}")->assertOk()->assertSee('Enviar correos pendientes');
+        $this->post("/expedientes/{$record}/notificar")->assertRedirect("/expedientes/{$record}");
+        Mail::assertSent(DecisionNotice::class, 4);
+        $this->assertDatabaseHas('ccyf_result_mailings', [
+            'registro_id' => $record, 'audience' => 'accounting', 'status' => 'sent',
+        ]);
     }
 
     public function test_log_mailer_keeps_designation_pending_until_real_delivery_is_configured(): void
