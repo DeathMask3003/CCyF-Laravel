@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\View\View;
+use Throwable;
 
 class PasswordRecoveryController extends Controller
 {
@@ -26,10 +27,16 @@ class PasswordRecoveryController extends Controller
         $email = mb_strtolower(trim($data['email']));
 
         $users = LegacyUser::query()->whereRaw('LOWER(usu_correo) = ?', [$email])->where('est', true)->get();
-        foreach ($users as $user) {
-            if ($menu->roleActive($user)) {
-                Password::broker()->sendResetLink(['usu_id' => $user->getKey()]);
+        try {
+            foreach ($users as $user) {
+                if ($menu->roleActive($user)) {
+                    Password::broker()->sendResetLink(['usu_id' => $user->getKey()]);
+                }
             }
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->withErrors(['email' => 'No pudimos enviar el enlace ahora. Inténtalo de nuevo más tarde.']);
         }
 
         return back()->with('status', 'Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.');

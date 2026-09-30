@@ -351,4 +351,14 @@ class AccessTest extends TestCase
         config()->set('ccyf.staging_recovery_smtp_emails', 'prueba@example.test');
         $this->assertNull((new CcyfResetPassword('token'))->toMail($user)->mailer);
     }
+
+    public function test_recovery_reports_mail_failure_without_server_error(): void
+    {
+        config()->set('logging.default', 'null');
+        Password::shouldReceive('broker')->once()->andThrow(new \RuntimeException('SMTP unavailable'));
+
+        $this->post('/recuperar-acceso', ['email' => 'prueba@example.test'])
+            ->assertRedirect()
+            ->assertSessionHasErrors('email');
+    }
 }
