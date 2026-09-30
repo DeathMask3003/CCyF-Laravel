@@ -2,7 +2,7 @@
 
 @section('title', 'Mi perfil')
 @push('head')
-<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20260923-2">
+<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20260930-1">
 @endpush
 
 @section('content')
@@ -51,7 +51,7 @@
         @if ($canManageSignature)
         <section class="panel profile-panel signature-panel" aria-labelledby="signature-title">
             <span class="eyebrow">Uso administrativo</span><h2 id="signature-title">Mi firma</h2>
-            <p class="muted">La imagen se utilizará en la hoja final de evaluación cuando tu perfil corresponda a uno de los firmantes.</p>
+            <p class="muted">Esta imagen aparecerá en la hoja final de evaluación si eliges «Imagen de firma» como método.</p>
             <div class="signature-preview" id="signature-preview">
                 @if ($signatureAvailable)
                     <img src="{{ route('perfil.signature') }}" alt="Firma actual de {{ $user->usu_area }}" id="signature-image">
@@ -71,6 +71,15 @@
         <section class="panel profile-panel sat-panel" aria-labelledby="sat-title">
             <span class="eyebrow">Identidad digital</span><h2 id="sat-title">e.firma del SAT</h2>
             <p class="muted">Carga tu certificado .cer y tu clave .key. Se validan con tu contraseña; la contraseña no se guarda. Los archivos nuevos se conservan en almacenamiento privado.</p>
+            <form method="post" action="{{ route('perfil.signature-method') }}" class="sat-method-form">@csrf @method('put')
+                <div class="sat-method-heading"><strong>Firma para la hoja final de evaluación</strong><small>Elige qué se mostrará junto a tu nombre cuando consulten el PDF.</small></div>
+                <div class="sat-method-options">
+                    <label><input type="radio" name="metodo" value="efirma" @checked(old('metodo', $satStatus['method']) === 'efirma') @disabled(!$satStatus['available'])><span><strong>e.firma SAT</strong><small>{{ $satStatus['available'] ? 'Datos de tu certificado en el PDF' : 'Carga tu certificado y clave para habilitarla' }}</small></span></label>
+                    <label><input type="radio" name="metodo" value="imagen" @checked(old('metodo', $satStatus['method']) === 'imagen') @disabled(!$satStatus['imageAvailable'])><span><strong>Imagen de firma</strong><small>{{ $satStatus['imageAvailable'] ? 'Tu firma manuscrita en el PDF' : 'Carga la imagen de tu firma para habilitarla' }}</small></span></label>
+                </div>
+                <button class="outline-button" type="submit" @disabled(!$satStatus['available'] && !$satStatus['imageAvailable'])>Guardar método de firma</button>
+                @error('metodo')<small class="field-error">{{ $message }}</small>@enderror
+            </form>
             @if($satStatus['available'])
                 <div class="sat-status"><span class="pill {{ $satStatus['expired'] ? 'pill-pending' : 'pill-ready' }}">{{ $satStatus['expired'] ? 'Certificado vencido' : 'Certificado cargado' }}</span><strong>{{ $satStatus['alias'] }}</strong>
                     @if($satStatus['serial'])<small>Serie: {{ $satStatus['serial'] }}</small>@endif
@@ -87,10 +96,7 @@
                 <label for="sat-password">Contraseña de la clave</label><input id="sat-password" name="password_sat" type="password" autocomplete="off" required>@error('password_sat')<small class="field-error">{{ $message }}</small>@enderror
                 <button class="button" type="submit">Validar y guardar e.firma</button>
             </form>
-            @if($satStatus['available'] || $satStatus['imageAvailable'])
-                <form method="post" action="{{ route('perfil.signature-method') }}" class="sat-method-form">@csrf @method('put')<strong>Método preferido</strong><div><label><input type="radio" name="metodo" value="efirma" @checked($satStatus['method'] === 'efirma') @disabled(!$satStatus['available'])> e.firma SAT</label><label><input type="radio" name="metodo" value="imagen" @checked($satStatus['method'] === 'imagen') @disabled(!$satStatus['imageAvailable'])> Imagen de firma</label></div><button class="outline-button" type="submit">Guardar preferencia</button>@error('metodo')<small class="field-error">{{ $message }}</small>@enderror</form>
-            @endif
-            <small class="field-help">Registrar la e.firma no aplica por sí solo una firma criptográfica a los PDF.</small>
+            <small class="field-help">La opción SAT muestra los datos del certificado como referencia visual; el PDF no lleva una firma criptográfica.</small>
         </section>
         @endif
         <section class="panel profile-panel" aria-labelledby="password-title">

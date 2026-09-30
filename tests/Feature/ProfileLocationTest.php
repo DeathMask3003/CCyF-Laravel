@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\LegacyUser;
 use App\Services\MexicanPhone;
 use App\Services\ProfilePhotos;
+use App\Services\SatElectronicSignatures;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -157,7 +158,8 @@ class ProfileLocationTest extends TestCase
             'key_path' => $legacySecure.DIRECTORY_SEPARATOR.'clave.pem', 'method' => 'efirma']);
 
         $this->be(LegacyUser::findOrFail(1));
-        $this->get('/mi-perfil')->assertOk()->assertSee('SAT original');
+        $this->get('/mi-perfil')->assertOk()->assertSee('SAT original')
+            ->assertSee('Firma para la hoja final de evaluación');
         $this->post('/mi-perfil/efirma', ['cer' => $this->satUpload('certificado.cer', $certPem),
             'key' => $this->satUpload('clave.key', $keyPem), 'password_sat' => 'Incorrecta'])
             ->assertSessionHasErrors('key');
@@ -167,11 +169,33 @@ class ProfileLocationTest extends TestCase
         $localFolder = Storage::disk('local')->path('sat-signatures/users/1');
         $this->assertCount(2, glob($localFolder.DIRECTORY_SEPARATOR.'*.pem'));
         $this->get('/mi-perfil')->assertSee('SAT nuevo');
+        $this->put('/mi-perfil/firma/metodo', ['metodo' => 'efirma'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $sat = app(SatElectronicSignatures::class);
+        $visual = $sat->visualFor(LegacyUser::findOrFail(1));
+        $this->assertSame('efirma', $visual['type']);
+        $this->assertMatchesRegularExpression('/^[A-F0-9]{64}$/', $visual['fingerprint']);
+        $html = view('revision.final-evaluation-signatures', [
+            'signers' => array_fill(0, 5, ['name' => 'Firmante', 'role' => 'Área administrativa', 'visual' => $visual]),
+            'compact' => true,
+        ])->render();
+        $this->assertStringContainsString('SHA-256', $html);
+        $this->assertStringContainsString(substr($visual['fingerprint'], 0, 32), $html);
+
+        $this->post('/mi-perfil/firma', ['firma' => UploadedFile::fake()->image('firma.png', 300, 120)])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->put('/mi-perfil/firma/metodo', ['metodo' => 'imagen'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('imagen', $sat->visualFor(LegacyUser::findOrFail(1))['type']);
+        $this->put('/mi-perfil/firma/metodo', ['metodo' => 'efirma'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('efirma', $sat->visualFor(LegacyUser::findOrFail(1))['type']);
         $this->post('/mi-perfil/efirma', ['cer' => $this->satUpload('certificado.cer', $certPem),
             'key' => $this->satUpload('clave.key', $keyPem), 'password_sat' => 'ClaveSAT123', 'alias' => 'SAT reemplazado'])
             ->assertRedirect()->assertSessionHasNoErrors();
         $this->assertCount(2, glob($localFolder.DIRECTORY_SEPARATOR.'*.pem'));
         $this->delete('/mi-perfil/efirma')->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('imagen', $sat->visualFor(LegacyUser::findOrFail(1))['type']);
         $this->assertSame([], glob($localFolder.DIRECTORY_SEPARATOR.'*.pem'));
         $this->assertFileDoesNotExist($legacySecure.DIRECTORY_SEPARATOR.'certificado.pem');
         $this->assertFileDoesNotExist($legacySecure.DIRECTORY_SEPARATOR.'clave.pem');

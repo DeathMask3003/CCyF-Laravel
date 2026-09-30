@@ -11,7 +11,10 @@ use Mpdf\Output\Destination;
 
 class FinalEvaluationReport
 {
-    public function __construct(private readonly SignatureImages $signatures) {}
+    public function __construct(
+        private readonly SignatureImages $signatures,
+        private readonly SatElectronicSignatures $satSignatures,
+    ) {}
 
     public function source(string $origin, int $recordId, string $service): ?object
     {
@@ -63,9 +66,15 @@ class FinalEvaluationReport
                 [190, 'Lic. Mariana Aline Sosa García', 'Departamento de Presupuesto y Contabilidad'],
                 [189, 'Lic. María Fernanda Godoy Díaz', 'Departamento de Recursos Materiales'],
             ] as [$userId, $name, $role]) {
+                $signer = LegacyUser::query()->where('legacy_usu_id', $userId)->first()
+                    ?? LegacyUser::find($userId);
+                $visual = $signer ? $this->satSignatures->visualFor($signer) : null;
+                if (! $signer && ($image = $this->signatures->dataUriForLegacyId($userId))) {
+                    $visual = ['type' => 'imagen', 'image' => $image];
+                }
                 $signers[] = [
                     'name' => $name, 'role' => $role,
-                    'image' => $this->signatures->dataUriForLegacyId($userId),
+                    'visual' => $visual,
                 ];
             }
         }

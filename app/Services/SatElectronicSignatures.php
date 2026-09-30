@@ -42,6 +42,38 @@ class SatElectronicSignatures
         ];
     }
 
+    /** @return array<string, mixed>|null */
+    public function visualFor(LegacyUser $user): ?array
+    {
+        $status = $this->status($user);
+
+        if ($status['method'] === 'imagen' && $status['imageAvailable']) {
+            $image = $this->images->dataUriForLegacyId((int) ($user->legacy_usu_id ?: $user->getKey()));
+
+            return $image ? ['type' => 'imagen', 'image' => $image] : null;
+        }
+
+        if ($status['method'] !== 'efirma' || ! $status['available']) {
+            return null;
+        }
+
+        $files = $this->localFiles($user) ?: $this->legacyFiles($user);
+        $pem = $files ? @file_get_contents($files['certificate']) : false;
+        $certificate = $pem ? @openssl_x509_read($pem) : false;
+        $fingerprint = $certificate ? @openssl_x509_fingerprint($certificate, 'sha256') : false;
+        if (! $fingerprint) {
+            return null;
+        }
+
+        return [
+            'type' => 'efirma',
+            'serial' => $status['serial'] ?: 'N/D',
+            'validTo' => $status['validTo'] ?: 'N/D',
+            'fingerprint' => strtoupper($fingerprint),
+            'expired' => $status['expired'],
+        ];
+    }
+
     public function save(LegacyUser $user, UploadedFile $certificate, UploadedFile $key, string $password, string $alias): void
     {
         if (! in_array(strtolower($certificate->getClientOriginalExtension()), ['cer', 'crt', 'pem'], true)
