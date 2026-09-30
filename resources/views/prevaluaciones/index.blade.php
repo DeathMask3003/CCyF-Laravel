@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260927-7"><link rel="stylesheet" href="{{ asset('css/prevaluation-summary.css') }}?v=20260923-2"><link rel="stylesheet" href="{{ asset('css/prevaluation-assignments.css') }}?v=20260923-1">@endpush
+@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260930-1"><link rel="stylesheet" href="{{ asset('css/prevaluation-summary.css') }}?v=20260923-2"><link rel="stylesheet" href="{{ asset('css/prevaluation-assignments.css') }}?v=20260923-1">@endpush
 
 @section('title', 'Prevaluaciones')
 
@@ -71,7 +71,7 @@
 @endif
 
 @if($selected)
-<dialog id="preval-dialog" class="preval-dialog" aria-labelledby="preval-dialog-title" data-open="true">
+<dialog id="preval-dialog" class="preval-dialog" aria-labelledby="preval-dialog-title" data-open="true" data-can-evaluate="{{ $canEvaluate ? '1' : '0' }}">
     <div class="preval-modal">
         <header class="preval-modal-head"><div><span class="preval-modal-kicker">{{ $selected->servicio === 'cafeteria' ? '☕ Cafetería' : '▤ Fotocopiado' }} · {{ $selected->convocatoria }}</span><h2 id="preval-dialog-title">{{ $selected->nombre ?: 'Permisionario' }}</h2><p>{{ $selected->plantel }} · Expediente {{ $selected->registro_id }}</p></div><button type="button" class="preval-dialog-close" aria-label="Cerrar expediente" data-close-preval>×</button></header>
         <div class="preval-modal-body">
@@ -79,12 +79,12 @@
                 <div class="preval-doc-list">
                     <a class="preval-doc-link preval-report-link" href="{{ route('prevaluaciones.report', $selected->key) }}" target="_blank" rel="noopener" data-preval-pdf data-pdf-name="Prevaluación y precios"><span class="preval-pdf-icon">PDF</span><span>Vista previa de prevaluación y precios<small>Reporte con todos los productos de la propuesta</small></span><span aria-hidden="true">↗</span></a>
                     @foreach($detail['documents'] as $document)
-                    @if($document->available)<a @class(['preval-doc-link', 'is-viewed' => $document->mime === 'application/pdf' && in_array($document->clave, $viewedFields, true)]) href="{{ route('prevaluaciones.file', ['key'=>$selected->key,'field'=>$document->clave]) }}" target="_blank" rel="noopener" @if($document->mime === 'application/pdf') data-preval-pdf data-pdf-name="{{ $document->nombre }}" data-viewed-url="{{ route('prevaluaciones.viewed', ['key'=>$selected->key,'field'=>$document->clave]) }}" @endif><span class="preval-pdf-icon">{{ $document->mime === 'application/pdf' ? 'PDF' : 'DOC' }}</span><span>{{ $document->nombre }}</span>@if($document->mime === 'application/pdf')<span class="preval-viewed-mark" aria-label="{{ in_array($document->clave, $viewedFields, true) ? 'PDF visto' : 'PDF sin revisar' }}" title="{{ in_array($document->clave, $viewedFields, true) ? 'PDF visto' : 'PDF sin revisar' }}">✓✓</span>@else<span aria-hidden="true">↗</span>@endif</a>
+                    @if($document->available)<a @class(['preval-doc-link', 'is-viewed' => $document->mime === 'application/pdf' && in_array($document->clave, $viewedFields, true)]) href="{{ route('prevaluaciones.file', ['key'=>$selected->key,'field'=>$document->clave]) }}" target="_blank" rel="noopener" @if($document->mime === 'application/pdf') data-preval-pdf data-pdf-name="{{ $document->nombre }}" data-preval-field="{{ $document->clave }}" data-viewed-url="{{ route('prevaluaciones.viewed', ['key'=>$selected->key,'field'=>$document->clave]) }}" @endif><span class="preval-pdf-icon">{{ $document->mime === 'application/pdf' ? 'PDF' : 'DOC' }}</span><span>{{ $document->nombre }}</span>@if($document->mime === 'application/pdf')<span class="preval-viewed-mark" aria-label="{{ in_array($document->clave, $viewedFields, true) ? 'PDF visto' : 'PDF sin revisar' }}" title="{{ in_array($document->clave, $viewedFields, true) ? 'PDF visto' : 'PDF sin revisar' }}">✓✓</span>@else<span aria-hidden="true">↗</span>@endif</a>
                     @else<span class="preval-doc-missing"><span class="preval-pdf-icon">—</span><span>{{ $document->nombre }}</span><small>Sin archivo</small></span>@endif
                 @endforeach</div>
             </aside>
 
-            <section class="preval-viewer" aria-label="Visualizador PDF"><div class="preval-viewer-head"><div><span class="eyebrow">02 · Visualización</span><h3 id="preval-pdf-name">Selecciona un documento</h3></div><a id="preval-pdf-open" class="preval-open-link" href="#" target="_blank" rel="noopener" hidden>Abrir PDF ↗</a></div>
+            <section class="preval-viewer" aria-label="Visualizador PDF"><div class="preval-viewer-head"><div><span class="eyebrow">02 · Visualización</span><h3 id="preval-pdf-name">Selecciona un documento</h3></div><div class="preval-viewer-actions"><button id="preval-review-jump" class="preval-review-jump" type="button" hidden>Ir a calificar ↓</button><a id="preval-pdf-open" class="preval-open-link" href="#" target="_blank" rel="noopener" hidden>Abrir PDF ↗</a></div></div>
                 <div id="preval-pdf-empty" class="preval-pdf-empty"><span aria-hidden="true">▤</span><strong>Selecciona un documento</strong><p>El PDF aparecerá aquí. En iPad también puedes abrirlo en una pestaña para usar el visor del dispositivo.</p></div>
                 <div id="preval-pdf-error" class="preval-pdf-error" role="alert" hidden>No fue posible mostrar este PDF aquí. Usa «Abrir PDF» para verlo en el visor del dispositivo.</div>
                 <div id="preval-pdf-stage" class="preval-pdf-stage" hidden><div id="preval-pdf-canvas-wrap" class="preval-pdf-canvas-wrap" aria-label="Páginas del documento PDF"><div id="preval-pdf-pages" class="preval-pdf-pages"></div></div><div class="preval-pdf-toolbar"><button type="button" id="preval-page-prev" aria-label="Página anterior">←</button><span id="preval-page-count">Página 1 de 1</span><button type="button" id="preval-page-next" aria-label="Página siguiente">→</button><span class="preval-toolbar-separator"></span><button type="button" id="preval-zoom-out" aria-label="Reducir zoom">−</button><span id="preval-zoom-label">100 %</span><button type="button" id="preval-zoom-in" aria-label="Aumentar zoom">+</button></div></div>
@@ -98,7 +98,7 @@
                     <div class="preval-checklist-scroll"><h4>Documentos</h4>
                     @foreach($detail['documents'] as $document)
                         @php($item = $detail['items']->get($document->clave))
-                        <fieldset class="preval-criterion"><legend>{{ $document->nombre }}</legend><span @class(['preval-file-status', 'missing' => ! $document->available])>{{ $document->available ? 'Archivo disponible' : 'Sin archivo' }}</span><div class="preval-choice"><label><input type="radio" name="items[{{ $document->clave }}][cumple]" value="1" @checked(old('items.'.$document->clave.'.cumple', $item?->cumple) !== null && (string) old('items.'.$document->clave.'.cumple', $item?->cumple) === '1') @disabled(! $canEvaluate)> Cumple</label><label><input type="radio" name="items[{{ $document->clave }}][cumple]" value="0" @checked(old('items.'.$document->clave.'.cumple', $item?->cumple) !== null && (string) old('items.'.$document->clave.'.cumple', $item?->cumple) === '0') @disabled(! $canEvaluate)> No cumple</label></div><input type="text" name="items[{{ $document->clave }}][comentario]" maxlength="1000" placeholder="Comentario sobre este documento" value="{{ old('items.'.$document->clave.'.comentario', $item?->comentario) }}" @disabled(! $canEvaluate)></fieldset>
+                        <fieldset class="preval-criterion" data-preval-criterion="{{ $document->clave }}"><legend>{{ $document->nombre }}</legend><span @class(['preval-file-status', 'missing' => ! $document->available])>{{ $document->available ? 'Archivo disponible' : 'Sin archivo' }}</span><div class="preval-choice"><label><input type="radio" name="items[{{ $document->clave }}][cumple]" value="1" @checked(old('items.'.$document->clave.'.cumple', $item?->cumple) !== null && (string) old('items.'.$document->clave.'.cumple', $item?->cumple) === '1') @disabled(! $canEvaluate)> Cumple</label><label><input type="radio" name="items[{{ $document->clave }}][cumple]" value="0" @checked(old('items.'.$document->clave.'.cumple', $item?->cumple) !== null && (string) old('items.'.$document->clave.'.cumple', $item?->cumple) === '0') @disabled(! $canEvaluate)> No cumple</label></div><input type="text" name="items[{{ $document->clave }}][comentario]" maxlength="1000" placeholder="Comentario sobre este documento" value="{{ old('items.'.$document->clave.'.comentario', $item?->comentario) }}" @disabled(! $canEvaluate)></fieldset>
                     @endforeach
                     @if($detail['prices']->isNotEmpty())<h4>Precios propuestos</h4><p class="preval-help">Los mínimos corresponden al mismo plantel, convocatoria y servicio.</p>
                         @foreach($detail['prices'] as $price)
@@ -143,6 +143,6 @@
     });
 })();
 </script>
-<script type="module" src="{{ asset('js/prevaluation-pdf.js') }}?v=20260927-6"></script>
+<script type="module" src="{{ asset('js/prevaluation-pdf.js') }}?v=20260930-1"></script>
 @endpush
 @endsection

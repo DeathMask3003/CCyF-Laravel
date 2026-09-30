@@ -14,6 +14,9 @@ if (dialog) {
     const name = document.getElementById('preval-pdf-name');
     const count = document.getElementById('preval-page-count');
     const zoomLabel = document.getElementById('preval-zoom-label');
+    const reviewJump = document.getElementById('preval-review-jump');
+    const checklist = dialog.querySelector('.preval-checklist');
+    const criteria = [...dialog.querySelectorAll('[data-preval-criterion]')];
     const previous = document.getElementById('preval-page-prev');
     const next = document.getElementById('preval-page-next');
     let pdf = null;
@@ -24,12 +27,15 @@ if (dialog) {
     let observer = null;
     let pageSlots = [];
     let activeLink = null;
+    let guidedRequest = -1;
+    let highlightTimer;
     const renderTasks = new Set();
     const viewRequests = new Set();
 
     async function markViewed(link) {
         const url = link?.dataset.viewedUrl;
-        if (!url || link.classList.contains('is-viewed') || viewRequests.has(url)) return;
+        if (!url || viewRequests.has(url)) return false;
+        if (link.classList.contains('is-viewed')) return true;
         viewRequests.add(url);
         try {
             const token = dialog.querySelector('input[name="_token"]')?.value;
@@ -44,11 +50,44 @@ if (dialog) {
                 mark.setAttribute('aria-label', 'PDF visto');
                 mark.title = 'PDF visto';
             }
+            return true;
         } catch (exception) {
             console.error('No se pudo guardar la visualización del PDF:', exception);
+            return false;
         } finally {
             viewRequests.delete(url);
         }
+    }
+
+    function highlightCriterion(criterion, moveToIt = false) {
+        clearTimeout(highlightTimer);
+        criteria.forEach(item => item.classList.remove('is-review-target'));
+        void criterion.offsetWidth;
+        criterion.classList.add('is-review-target');
+        highlightTimer = setTimeout(() => criterion.classList.remove('is-review-target'), 4200);
+
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (moveToIt) {
+            criterion.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' });
+            const choice = criterion.querySelector('input[type="radio"]:checked:not(:disabled)')
+                || criterion.querySelector('input[type="radio"]:not(:disabled)');
+            if (!choice) criterion.tabIndex = -1;
+            (choice || criterion).focus({ preventScroll: true });
+        } else if (window.matchMedia('(min-width: 1251px)').matches) {
+            const top = checklist.scrollTop + criterion.getBoundingClientRect().top
+                - checklist.getBoundingClientRect().top - 22;
+            checklist.scrollTo({ top, behavior: reducedMotion ? 'instant' : 'smooth' });
+        }
+    }
+
+    function guideToCriterion(link) {
+        const criterion = criteria.find(item => item.dataset.prevalCriterion === link.dataset.prevalField);
+        if (!criterion) return;
+        reviewJump.hidden = false;
+        reviewJump.textContent = dialog.dataset.canEvaluate === '1' ? 'Ir a calificar ↓' : 'Ver calificación ↓';
+        reviewJump.setAttribute('aria-label', `${reviewJump.textContent} ${link.dataset.pdfName}`);
+        reviewJump.onclick = () => highlightCriterion(criterion, true);
+        highlightCriterion(criterion);
     }
 
     const updateControls = () => {
@@ -117,7 +156,16 @@ if (dialog) {
             slot.style.minHeight = `${Math.floor(viewport.height)}px`;
             slot.replaceChildren(canvas);
             slot.dataset.state = 'done';
-            if (number === 1 && activeLink?.dataset.viewedUrl) markViewed(activeLink);
+            if (number === 1 && activeLink?.dataset.viewedUrl) {
+                const viewedLink = activeLink;
+                const selection = requestId;
+                markViewed(viewedLink).then(seen => {
+                    if (seen && selection === requestId && activeLink === viewedLink && guidedRequest !== selection) {
+                        guidedRequest = selection;
+                        guideToCriterion(viewedLink);
+                    }
+                });
+            }
             page.cleanup();
         } catch (exception) {
             if (version !== renderVersion || exception?.name === 'RenderingCancelledException') return;
@@ -174,6 +222,10 @@ if (dialog) {
     async function load(link) {
         const current = ++requestId;
         activeLink = link;
+        reviewJump.hidden = true;
+        reviewJump.onclick = null;
+        clearTimeout(highlightTimer);
+        criteria.forEach(item => item.classList.remove('is-review-target'));
         links.forEach(item => item.classList.toggle('selected', item === link));
         name.textContent = link.dataset.pdfName || 'Documento PDF';
         open.href = link.href;
@@ -229,6 +281,8 @@ if (dialog) {
     dialog.addEventListener('close', () => {
         requestId++;
         activeLink = null;
+        reviewJump.hidden = true;
+        clearTimeout(highlightTimer);
         clearPages();
         const old = pdf;
         pdf = null;

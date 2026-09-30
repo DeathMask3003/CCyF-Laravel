@@ -223,7 +223,10 @@ class PrevaluationTest extends TestCase
     {
         $this->be(LegacyUser::findOrFail(20));
         $this->get('/prevaluaciones?registro=historico-80')->assertOk()
-            ->assertSee('PDF sin revisar')->assertSee('data-viewed-url=', false);
+            ->assertSee('PDF sin revisar')->assertSee('data-viewed-url=', false)
+            ->assertSee('data-preval-field="prop_escrito"', false)
+            ->assertSee('data-preval-criterion="prop_escrito"', false)
+            ->assertSee('id="preval-review-jump"', false);
         $this->post('/prevaluaciones/historico-80/documentos/prop_escrito/visto')->assertNoContent();
         $this->post('/prevaluaciones/historico-80/documentos/prop_escrito/visto')->assertNoContent();
         $this->assertDatabaseCount('ccyf_prevaluacion_vistas', 1);
