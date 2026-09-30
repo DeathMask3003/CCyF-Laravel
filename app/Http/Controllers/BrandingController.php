@@ -32,6 +32,12 @@ class BrandingController extends Controller
             'logo' => ['nullable', 'file', 'image', 'mimes:png,jpg,jpeg,webp', 'max:4096',
                 'dimensions:min_width=80,min_height=80,max_width=4000,max_height=4000'],
             'remove_logo' => ['sometimes', 'boolean'],
+        ], [
+            'logo.image' => 'Selecciona una imagen PNG, JPG o WebP válida.',
+            'logo.mimes' => 'La imagen debe estar en formato PNG, JPG o WebP.',
+            'logo.max' => 'La imagen no debe superar 4 MB.',
+            'logo.dimensions' => 'La imagen debe medir entre 80 × 80 y 4000 × 4000 píxeles.',
+            'logo.uploaded' => 'No se pudo subir la imagen. Comprueba su tamaño e inténtalo de nuevo.',
         ]);
 
         if ($request->hasFile('logo') && $request->boolean('remove_logo')) {

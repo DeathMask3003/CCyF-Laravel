@@ -54,7 +54,8 @@ class BrandingTest extends TestCase
     {
         Storage::fake('local');
         $this->actingAs(LegacyUser::findOrFail(1));
-        $this->get('/administracion/identidad')->assertOk()->assertSee('Identidad del portal');
+        $this->get('/administracion/identidad')->assertOk()->assertSee('Identidad del portal')
+            ->assertSee('brand-logo-status')->assertSee('js/branding-preview.js');
 
         $this->put('/administracion/identidad', [
             'title' => 'Portal de servicios CCyF',
@@ -89,7 +90,11 @@ class BrandingTest extends TestCase
         $this->put('/administracion/identidad', [
             'title' => 'Portal CCyF', 'motto' => 'Un lema nuevo',
             'logo' => UploadedFile::fake()->create('vector.svg', 4, 'image/svg+xml'),
-        ])->assertSessionHasErrors('logo');
+        ])->assertSessionHasErrors(['logo' => 'Selecciona una imagen PNG, JPG o WebP válida.']);
+        $this->put('/administracion/identidad', [
+            'title' => 'Portal CCyF', 'motto' => 'Un lema nuevo',
+            'logo' => UploadedFile::fake()->image('pequeno.png', 50, 50),
+        ])->assertSessionHasErrors(['logo' => 'La imagen debe medir entre 80 × 80 y 4000 × 4000 píxeles.']);
         $this->assertDatabaseCount('ccyf_branding', 0);
     }
 }
