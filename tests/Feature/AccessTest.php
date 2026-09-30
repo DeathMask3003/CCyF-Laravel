@@ -334,4 +334,21 @@ class AccessTest extends TestCase
         $this->assertTrue(Hash::check('OtraClave123', LegacyUser::findOrFail(8)->usu_pass));
         $this->assertDatabaseMissing('password_reset_tokens', ['email' => '7']);
     }
+
+    public function test_staging_recovery_uses_smtp_only_for_explicitly_allowed_account(): void
+    {
+        $user = LegacyUser::findOrFail(7);
+        config()->set('app.env', 'staging');
+        config()->set('mail.default', 'log');
+        config()->set('ccyf.staging_recovery_smtp_emails', 'otra@example.test, PRUEBA@example.test');
+
+        $this->assertSame('smtp', (new CcyfResetPassword('token'))->toMail($user)->mailer);
+
+        config()->set('ccyf.staging_recovery_smtp_emails', 'otra@example.test');
+        $this->assertNull((new CcyfResetPassword('token'))->toMail($user)->mailer);
+
+        config()->set('app.env', 'local');
+        config()->set('ccyf.staging_recovery_smtp_emails', 'prueba@example.test');
+        $this->assertNull((new CcyfResetPassword('token'))->toMail($user)->mailer);
+    }
 }

@@ -33,6 +33,8 @@ Una vez configurado SMTP, comprobarlo con un único destinatario de control, ele
 
 El comando usa SMTP solo para ese mensaje; no cambia `MAIL_MAILER`. Un resultado satisfactorio confirma que el servidor de correo aceptó el mensaje. Hay que verificar también que llegó al buzón. Si falla, revisar `storage/logs/laravel.log` sin compartir contraseñas ni el `.env`. Antes del corte, revisar en el `.env` los destinatarios `CCYF_MAIL_LEGAL`, `CCYF_MAIL_MANAGEMENT` y `CCYF_MAIL_CCYF` para los avisos de resolución.
 
+Para comprobar la recuperación de contraseña con una cuenta de pruebas ya registrada, conservar `MAIL_MAILER=log` y agregar el correo **exacto de esa cuenta** a `CCYF_STAGING_RECOVERY_SMTP_EMAILS`. Se admiten varias direcciones separadas por comas. Solo los mensajes de recuperación destinados a esa lista saldrán por SMTP en `staging`; los de otras cuentas permanecerán en el registro. Confirmar primero que `ccyf:mail-test` llega al buzón y limpiar la caché de configuración después de editar `.env`. No incluir correos de usuarios reales de la copia sin necesidad de prueba.
+
 Para ensayar Turnstile, crear en Cloudflare un widget para `pruebas.cobaemex.edu.mx` y otro para `ccyf.cobaemex.edu.mx`. Colocar **solo las claves del primero** en el `.env` de pruebas:
 
 ```dotenv

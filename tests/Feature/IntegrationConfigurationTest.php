@@ -19,6 +19,7 @@ class IntegrationConfigurationTest extends TestCase
         config()->set('mail.from.address', 'remitente@example.test');
 
         $this->artisan('ccyf:mail-test', ['recipient' => 'control@example.test'])
+            ->expectsOutput('Completa en el .env: MAIL_PASSWORD.')
             ->assertFailed();
     }
 

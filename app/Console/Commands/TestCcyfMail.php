@@ -23,10 +23,19 @@ class TestCcyfMail extends Command
 
         $smtp = config('mail.mailers.smtp');
         $sender = config('mail.from.address');
-        if (! filled($smtp['host'] ?? null) || ! filled($smtp['port'] ?? null)
-            || ! filled($smtp['username'] ?? null) || ! filled($smtp['password'] ?? null)
-            || ! filter_var($sender, FILTER_VALIDATE_EMAIL)) {
-            $this->error('Faltan datos de SMTP o un remitente válido en el .env del servidor.');
+        $required = [
+            'MAIL_HOST' => $smtp['host'] ?? null,
+            'MAIL_PORT' => $smtp['port'] ?? null,
+            'MAIL_USERNAME' => $smtp['username'] ?? null,
+            'MAIL_PASSWORD' => $smtp['password'] ?? null,
+        ];
+        $missing = array_keys(array_filter($required, fn ($value) => ! filled($value)));
+        if (! filter_var($sender, FILTER_VALIDATE_EMAIL)
+            || str_ends_with(mb_strtolower((string) $sender), '@example.com')) {
+            $missing[] = 'MAIL_FROM_ADDRESS';
+        }
+        if ($missing !== []) {
+            $this->error('Completa en el .env: '.implode(', ', $missing).'.');
 
             return self::FAILURE;
         }
