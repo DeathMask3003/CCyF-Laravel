@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#56152f">
     <title>@yield('title') · CCyF</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v=20260929">
+    <link rel="alternate icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=20260929">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}?v=20260929">
     <link rel="stylesheet" href="{{ asset('css/auth.css') }}?v=20260923-1">
     <link rel="stylesheet" href="{{ asset('css/branding.css') }}?v=20260923-1">
 </head>
