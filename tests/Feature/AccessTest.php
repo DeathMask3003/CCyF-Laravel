@@ -69,6 +69,25 @@ class AccessTest extends TestCase
         $this->get('/acceso')->assertOk();
     }
 
+    public function test_roles_page_shows_assigned_user_counts_including_empty_roles(): void
+    {
+        DB::table('ccyf_roles')->insert([
+            ['rol_id' => 1, 'rol_nom' => 'Administración', 'est' => true],
+            ['rol_id' => 2, 'rol_nom' => 'Prevaluación', 'est' => true],
+        ]);
+        DB::table('ccyf_role_permissions')->insert([
+            'rol_id' => 1, 'menu_key' => 'Rol', 'allowed' => true,
+        ]);
+        DB::table('ccyf_usuarios')->insert([
+            'usu_area' => 'Segunda cuenta', 'usu_pass' => 'test', 'rol_id' => 1,
+        ]);
+
+        $this->actingAs(LegacyUser::findOrFail(7))->get('/roles')
+            ->assertOk()
+            ->assertSee('2 usuarios asignados')
+            ->assertSee('0 usuarios asignados');
+    }
+
     public function test_integrations_stay_off_locally_even_with_keys(): void
     {
         config()->set('app.env', 'local');

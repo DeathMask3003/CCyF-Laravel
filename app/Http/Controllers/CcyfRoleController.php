@@ -16,10 +16,15 @@ class CcyfRoleController extends Controller
     public function index(Request $request, LegacyMenu $menu): View
     {
         $this->authorizeRoles($request, $menu);
+        $userCounts = DB::table('ccyf_usuarios')
+            ->select('rol_id')
+            ->selectRaw('COUNT(*) as usuarios')
+            ->groupBy('rol_id');
+
         $roles = DB::table('ccyf_roles as role')
-            ->leftJoin('ccyf_usuarios as usuario', 'usuario.rol_id', '=', 'role.rol_id')
-            ->select('role.*')->selectRaw('COUNT(usuario.usu_id) as usuarios')
-            ->groupBy('role.rol_id')->orderByDesc('role.est')->orderBy('role.rol_nom')->get();
+            ->leftJoinSub($userCounts, 'counts', 'counts.rol_id', '=', 'role.rol_id')
+            ->select('role.*')->selectRaw('COALESCE(counts.usuarios, 0) as usuarios')
+            ->orderByDesc('role.est')->orderBy('role.rol_nom')->get();
 
         return view('roles.index', compact('roles'));
     }
