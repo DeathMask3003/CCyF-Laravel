@@ -43,7 +43,7 @@ El XAMPP de destino informó PHP 8.2.12. El archivo de dependencias fija ZipStre
 7. Confirmar primero que `ccyflaravel` contiene las tablas históricas esperadas y no contiene ya tablas `ccyf_*` ni `migrations`; respaldarla. Ejecutar `php artisan optimize:clear`, `php artisan ccyf:preflight --check-db` y `php artisan migrate --force`. Después importar, en este orden: `ccyf:import-identity`, `ccyf:import-service-types`, `ccyf:import-document-types`, `ccyf:import-structure`, `ccyf:import-profiles-locations`, `ccyf:import-documentacion-permisos`, `ccyf:import-prevaluacion-permisos`, `ccyf:import-contratos-permisos`, `ccyf:import-permisionarios`. Comprobar conteos y abrir expedientes antes de habilitar el sitio al público.
 8. Activar cachés de configuración y vistas una vez comprobado `.env`. Verificar correo SMTP, PDF, autenticación, captcha y Google solo cuando estén configurados los servicios correspondientes.
 
-La ruta concreta del código original y las credenciales del Windows Server aún deben confirmarse allí. El repositorio remoto debe contener el commit preparado localmente antes de clonar en el servidor.
+El código original está en `C:\xampp\htdocs\ccyf`. El ensayo con DNS y certificado propio se prepara en [la guía de pruebas](PRUEBAS_WINDOWS_SERVER.md). El dominio de producción continúa dirigido al sistema original mientras se valida la instalación Laravel.
 
 ## Directorios históricos usados por Laravel
 
@@ -59,9 +59,7 @@ Los valores siguientes son configurables y deben apuntar a archivos **de producc
 
 ## Estado de verificación (29 de septiembre de 2026)
 
-- El proyecto local sigue configurado con SQLite para desarrollo. La base SQLite y `storage/app/private` están excluidos de Git.
-- La copia local de la base histórica tiene 84 tablas y no contiene `ccyf_*`, `migrations` ni las tablas internas `cache`, `jobs` y `sessions`.
-- El usuario `legacy` local tiene únicamente permiso `SELECT` sobre `ccyf`. Un esquema MySQL 8.3 aislado recibió todas las migraciones con InnoDB y los importadores iniciales. El ensayo importó 398 usuarios, 83 planteles, 9 convocatorias y 2 seguimientos históricos. Quedaron cero registros nuevos y cero archivos de prueba. Se corrigieron un índice de nombre excesivo y fechas cero heredadas durante el ensayo.
-- El ensayo es sobre la copia local de datos históricos. Falta verificar PHP, XAMPP, SMTP, rutas y permisos en el Windows Server real.
-- El esquema temporal del ensayo se eliminó al terminar; la base histórica `ccyf` permanece disponible.
-- El repositorio remoto responde por Git y no publica referencias todavía. El código quedó en un commit local; no se ha subido ni se ha modificado el servidor de producción.
+- Git ya instaló Laravel 12.69.2 en `C:\xampp\htdocs\ccyf-laravel` con PHP 8.2.12 de XAMPP. El entorno del servidor es `staging`, usa `MAIL_MAILER=log` y apunta a la copia `ccyflaravel`.
+- En la copia del servidor se importaron 398 usuarios, 83 planteles, 11 convocatorias y 2 seguimientos históricos. Se confirmó el acceso con una cuenta administrativa y una de permisionario de prueba, además de la apertura de un PDF.
+- La cuenta de permisionario de prueba no tiene registros nuevos en esa copia. Los registros creados solo en desarrollo no se transportan por Git.
+- Queda por confirmar la copia completa de los directorios históricos y los permisos de escritura de Apache. La publicación HTTPS en `pruebas.cobaemex.edu.mx` y Google tienen su propia secuencia de verificación antes de cualquier cambio del dominio de producción.

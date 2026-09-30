@@ -11,10 +11,13 @@ class ProductionIntegrations
 
     public function google(): bool
     {
-        return config('app.env') === 'production'
+        $appUrl = rtrim((string) config('app.url'), '/');
+
+        return in_array(config('app.env'), ['staging', 'production'], true)
             && (bool) config('ccyf.google_login_enabled')
+            && str_starts_with($appUrl, 'https://')
             && filled(config('services.google.client_id'))
             && filled(config('services.google.client_secret'))
-            && filled(config('services.google.redirect'));
+            && config('services.google.redirect') === $appUrl.'/acceso/google/callback';
     }
 }

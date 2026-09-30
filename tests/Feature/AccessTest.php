@@ -68,7 +68,7 @@ class AccessTest extends TestCase
         $this->get('/acceso')->assertOk();
     }
 
-    public function test_integrations_stay_off_outside_production_even_with_keys(): void
+    public function test_integrations_stay_off_locally_even_with_keys(): void
     {
         config()->set('app.env', 'local');
         config()->set('ccyf.turnstile.enabled', true);
@@ -112,6 +112,7 @@ class AccessTest extends TestCase
     public function test_google_sign_in_links_a_verified_gmail_account_by_stable_id(): void
     {
         config()->set('app.env', 'production');
+        config()->set('app.url', 'https://ccyf.example.test');
         config()->set('ccyf.google_login_enabled', true);
         config()->set('services.google', ['client_id' => 'id', 'client_secret' => 'secret', 'redirect' => 'https://ccyf.example.test/acceso/google/callback']);
         DB::table('ccyf_usuarios')->where('usu_id', 7)->update(['usu_correo' => 'prueba@gmail.com']);
@@ -127,6 +128,7 @@ class AccessTest extends TestCase
     public function test_google_does_not_link_an_unverified_email(): void
     {
         config()->set('app.env', 'production');
+        config()->set('app.url', 'https://ccyf.example.test');
         config()->set('ccyf.google_login_enabled', true);
         config()->set('services.google', ['client_id' => 'id', 'client_secret' => 'secret', 'redirect' => 'https://ccyf.example.test/acceso/google/callback']);
         Socialite::fake('google', GoogleUser::fake(['id' => 'google-123', 'email' => 'prueba@example.test', 'email_verified' => false]));
@@ -135,6 +137,44 @@ class AccessTest extends TestCase
         $this->get('/acceso/google/callback')->assertRedirect('/acceso')->assertSessionHasErrors('email');
         $this->assertNull(DB::table('ccyf_usuarios')->where('usu_id', 7)->value('google_sub'));
         $this->assertGuest();
+    }
+
+    public function test_google_can_be_enabled_on_https_staging_with_its_own_callback(): void
+    {
+        config()->set('app.env', 'staging');
+        config()->set('app.url', 'https://pruebas.cobaemex.edu.mx');
+        config()->set('ccyf.google_login_enabled', true);
+        config()->set('services.google', [
+            'client_id' => 'id',
+            'client_secret' => 'secret',
+            'redirect' => 'https://pruebas.cobaemex.edu.mx/acceso/google/callback',
+        ]);
+        DB::table('ccyf_usuarios')->where('usu_id', 7)->update(['usu_correo' => 'prueba@gmail.com']);
+        Socialite::fake('google', GoogleUser::fake(['id' => 'google-staging', 'email' => 'prueba@gmail.com', 'email_verified' => true]));
+
+        $this->get('/acceso')->assertSee('acceso/google');
+        $this->get('/acceso/google')->assertRedirect('https://socialite.fake/google/authorize');
+        $this->get('/acceso/google/callback')->assertRedirect('/panel');
+        $this->assertAuthenticatedAs(LegacyUser::findOrFail(7));
+    }
+
+    public function test_google_stays_off_when_staging_callback_or_scheme_is_wrong(): void
+    {
+        config()->set('app.env', 'staging');
+        config()->set('app.url', 'https://pruebas.cobaemex.edu.mx');
+        config()->set('ccyf.google_login_enabled', true);
+        config()->set('services.google', [
+            'client_id' => 'id',
+            'client_secret' => 'secret',
+            'redirect' => 'https://ccyf.cobaemex.edu.mx/acceso/google/callback',
+        ]);
+
+        $this->get('/acceso')->assertDontSee('acceso/google');
+        $this->get('/acceso/google')->assertNotFound();
+
+        config()->set('app.url', 'http://pruebas.cobaemex.edu.mx');
+        config()->set('services.google.redirect', 'http://pruebas.cobaemex.edu.mx/acceso/google/callback');
+        $this->get('/acceso/google')->assertNotFound();
     }
 
     public function test_public_registration_requires_turnstile_only_in_production(): void
