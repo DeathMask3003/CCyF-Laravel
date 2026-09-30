@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\LegacyMenu;
 use App\Services\RegistrationRequirements;
+use App\Services\RegistrationNotifications;
 use App\Services\TurnstileVerification;
 use App\Rules\PdfDocument;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -11,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -99,7 +101,7 @@ class NewOfficeController extends Controller
         return back()->with('status', 'Borrador guardado. Puedes continuar y enviar el registro cuando tengas todos los PDF.');
     }
 
-    public function submit(int $category, Request $request, LegacyMenu $menu, RegistrationRequirements $requirements, TurnstileVerification $turnstile): RedirectResponse
+    public function submit(int $category, Request $request, LegacyMenu $menu, RegistrationRequirements $requirements, TurnstileVerification $turnstile, RegistrationNotifications $notifications): RedirectResponse
     {
         abort_unless($menu->allows($request->user(), 'NuevoOficio'), 403);
         [, $catalog, $products] = $this->context($category);
@@ -206,10 +208,16 @@ class NewOfficeController extends Controller
             throw $exception;
         }
 
+        try {
+            $notifications->dispatch($recordId);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+
         return redirect()->route('oficios.receipt', $recordId);
     }
 
-    public function receipt(int $record, Request $request, LegacyMenu $menu): View
+    public function receipt(int $record, Request $request, LegacyMenu $menu, RegistrationNotifications $notifications): View
     {
         $registration = DB::table('ccyf_registros as registro')
             ->join('ccyf_convocatorias as convocatoria', 'convocatoria.id', '=', 'registro.convocatoria_id')
@@ -222,8 +230,10 @@ class NewOfficeController extends Controller
         $owns = (int) $registration->usu_id === (int) $request->user()->getKey();
         abort_unless($owns || $menu->allows($request->user(), 'Categorias_widi'), 403);
         $files = DB::table('ccyf_registro_archivos')->where('registro_id', $record)->count();
+        $mailings = Schema::hasTable('ccyf_registration_mailings')
+            ? $notifications->status($record)->keyBy('audience') : collect();
 
-        return view('oficios.receipt', compact('registration', 'files'));
+        return view('oficios.receipt', compact('registration', 'files', 'mailings'));
     }
 
     private function validateCore(Request $request, int $category, $products, array $extra = [], array $attributes = []): array

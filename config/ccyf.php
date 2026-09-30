@@ -8,6 +8,7 @@ return [
     ],
     'google_login_enabled' => (bool) env('CCYF_GOOGLE_LOGIN_ENABLED', false),
     'staging_recovery_smtp_emails' => env('CCYF_STAGING_RECOVERY_SMTP_EMAILS', ''),
+    'staging_registration_smtp_emails' => env('CCYF_STAGING_REGISTRATION_SMTP_EMAILS', ''),
     'legacy_root' => env('CCYF_LEGACY_ROOT'),
     'legacy_password_key' => env('CCYF_LEGACY_PASSWORD_KEY'),
     'expected_tables' => [

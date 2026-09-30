@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\LegacyUser;
 use App\Mail\DecisionNotice;
+use App\Mail\RegistrationNotice;
 use App\Services\DocumentTypes;
 use App\Services\CcyfStructure;
 use App\Services\PriceCatalogs;
 use App\Services\RegistrationRequirements;
+use App\Services\RegistrationNotifications;
 use App\Services\ServiceTypes;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
@@ -550,6 +552,12 @@ class PriceCatalogTest extends TestCase
         ]);
         $this->assertDatabaseCount('ccyf_registro_precios', $products->count());
         $this->assertDatabaseCount('ccyf_registro_archivos', $requirements->count());
+        $this->assertDatabaseHas('ccyf_registration_mailings', [
+            'registro_id' => 1, 'audience' => 'participant', 'status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('ccyf_registration_mailings', [
+            'registro_id' => 1, 'audience' => 'office', 'status' => 'pending',
+        ]);
         $this->assertCount($requirements->count(), Storage::disk('local')->allFiles('ccyf/registros/1'));
         $this->get('/nuevo-oficio/registros/1')->assertOk()->assertSee('CCYF-'.now()->format('Y').'-00001');
 
@@ -562,6 +570,56 @@ class PriceCatalogTest extends TestCase
         } catch (UniqueConstraintViolationException) {
             $this->assertDatabaseCount('ccyf_registros', 1);
         }
+    }
+
+    public function test_staging_registration_mail_sends_only_allowlisted_recipients_and_can_retry_one_folio(): void
+    {
+        $catalogId = app(PriceCatalogs::class)->prepare(8);
+        $recordId = DB::table('ccyf_registros')->insertGetId([
+            'folio' => 'CCYF-2026-00001', 'convocatoria_id' => 8,
+            'catalogo_id' => $catalogId, 'servicio_id' => 1, 'plantel_id' => 23,
+            'tipo_documento_id' => 1, 'usu_id' => 2, 'solicitante' => 'Concursante',
+            'dirigido_a' => 'Administración', 'comentarios' => 'Propuesta', 'estado' => 'Recibido',
+            'enviado_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        config()->set('app.env', 'staging');
+        config()->set('mail.default', 'log');
+        config()->set('mail.mailers.smtp.host', 'smtp.office365.com');
+        config()->set('mail.mailers.smtp.port', 587);
+        config()->set('mail.mailers.smtp.username', 'remitente@example.test');
+        config()->set('mail.mailers.smtp.password', 'test-secret');
+        config()->set('mail.from.address', 'remitente@example.test');
+        config()->set('ccyf.mail_ccyf', 'cafeteria.fotocopiado@cobaemex.edu.mx');
+        config()->set('ccyf.staging_registration_smtp_emails', 'persona@example.test');
+        Mail::fake();
+
+        $notifications = app(RegistrationNotifications::class);
+        $this->assertStringContainsString('CCYF-2026-00001',
+            (new RegistrationNotice($notifications->record($recordId), 'participant'))->render());
+        $this->assertSame(['sent' => 1, 'pending' => 1, 'failed' => 0, 'alreadySent' => 0],
+            $notifications->dispatch($recordId));
+        Mail::assertSent(RegistrationNotice::class, 1);
+        Mail::assertSent(RegistrationNotice::class, fn (RegistrationNotice $mail): bool =>
+            $mail->audience === 'participant' && $mail->hasTo('persona@example.test'));
+        $this->assertDatabaseHas('ccyf_registration_mailings', [
+            'registro_id' => $recordId, 'audience' => 'office', 'status' => 'pending',
+        ]);
+
+        config()->set('ccyf.staging_registration_smtp_emails',
+            'persona@example.test,cafeteria.fotocopiado@cobaemex.edu.mx');
+        $this->artisan('ccyf:registration-mail', ['folio' => 'CCYF-2026-00001'])
+            ->assertSuccessful();
+        Mail::assertSent(RegistrationNotice::class, 1);
+        $this->artisan('ccyf:registration-mail', ['folio' => 'CCYF-2026-00001', '--send' => true])
+            ->assertSuccessful();
+        Mail::assertSent(RegistrationNotice::class, 2);
+        Mail::assertSent(RegistrationNotice::class, fn (RegistrationNotice $mail): bool =>
+            $mail->audience === 'office' && $mail->hasTo('cafeteria.fotocopiado@cobaemex.edu.mx'));
+        $this->assertDatabaseCount('ccyf_registration_mailings', 2);
+        $this->assertDatabaseMissing('ccyf_registration_mailings', ['status' => 'pending']);
+        $this->assertSame(['sent' => 0, 'pending' => 0, 'failed' => 0, 'alreadySent' => 2],
+            $notifications->dispatch($recordId));
+        Mail::assertSent(RegistrationNotice::class, 2);
     }
 
     public function test_registration_accepts_real_pdf_content_when_mime_is_reported_as_text(): void

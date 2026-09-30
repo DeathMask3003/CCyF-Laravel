@@ -35,6 +35,17 @@ El comando usa SMTP solo para ese mensaje; no cambia `MAIL_MAILER`. Un resultado
 
 Para comprobar la recuperación de contraseña con una cuenta de pruebas ya registrada, conservar `MAIL_MAILER=log` y agregar el correo **exacto de esa cuenta** a `CCYF_STAGING_RECOVERY_SMTP_EMAILS`. Se admiten varias direcciones separadas por comas. Solo los mensajes de recuperación destinados a esa lista saldrán por SMTP en `staging`; los de otras cuentas permanecerán en el registro. Confirmar primero que `ccyf:mail-test` llega al buzón y limpiar la caché de configuración después de editar `.env`. No incluir correos de usuarios reales de la copia sin necesidad de prueba.
 
+Los avisos de **nuevo registro** se envían al participante y a `CCYF_MAIL_CCYF`. En pruebas, mantener `MAIL_MAILER=log` y autorizar solo los dos correos concretos del ensayo mediante `CCYF_STAGING_REGISTRATION_SMTP_EMAILS="correo-del-participante,cafeteria.fotocopiado@cobaemex.edu.mx"`. El correo del plantel se copia únicamente si también está en esa lista. Tras editar `.env`, ejecutar `artisan optimize:clear`. Los demás destinatarios quedan pendientes, sin enviar mensajes a cuentas reales de la base copiada.
+
+Después de `artisan migrate --force`, se puede consultar un folio y reintentar solo sus avisos pendientes:
+
+```powershell
+& 'C:\xampp\php\php.exe' artisan ccyf:registration-mail 'CCYF-2026-00001'
+& 'C:\xampp\php\php.exe' artisan ccyf:registration-mail 'CCYF-2026-00001' --send
+```
+
+El primer comando muestra destinatarios y estados sin enviar nada. El segundo no reenvía los avisos ya aceptados por SMTP. Que SMTP acepte un mensaje no confirma su entrega al buzón; revisar también ambos buzones.
+
 Para ensayar Turnstile, crear en Cloudflare un widget para `pruebas.cobaemex.edu.mx` y otro para `ccyf.cobaemex.edu.mx`. Colocar **solo las claves del primero** en el `.env` de pruebas:
 
 ```dotenv
