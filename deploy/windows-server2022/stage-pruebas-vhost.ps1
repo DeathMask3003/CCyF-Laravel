@@ -5,21 +5,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $apache = Join-Path $XamppRoot 'apache\bin\httpd.exe'
-$htpasswd = Join-Path $XamppRoot 'apache\bin\htpasswd.exe'
 $vhosts = Join-Path $XamppRoot 'apache\conf\extra\httpd-vhosts.conf'
-$authDir = Join-Path $XamppRoot 'ccyf-staging-auth'
-$authFile = Join-Path $authDir 'users.htpasswd'
-$authFileApache = $authFile.Replace('\', '/')
 $project = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\')
 $htdocs = [System.IO.Path]::GetFullPath((Join-Path $XamppRoot 'htdocs')).TrimEnd('\')
 $public = (Join-Path $project 'public').Replace('\', '/')
-$oldRoot = 'C:/xampp/htdocs/pruebasccyf'
 $encoding = [System.Text.Encoding]::GetEncoding(28591)
 
 if (-not $project.StartsWith($htdocs + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "El proyecto debe estar dentro de $htdocs."
 }
-foreach ($path in @($apache, $htpasswd, $vhosts, (Join-Path $project 'public\index.php'), (Join-Path $project '.env'))) {
+foreach ($path in @($apache, $vhosts, (Join-Path $project 'public\index.php'), (Join-Path $project '.env'))) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Falta el archivo: $path" }
 }
 if ($public.Contains('"')) { throw 'La ruta del proyecto contiene comillas no admitidas por Apache.' }
@@ -35,94 +30,55 @@ if ($before.Code -ne 0) { throw "Apache ya tiene errores de configuracion: $($be
 
 $content = [System.IO.File]::ReadAllText($vhosts, $encoding)
 $blocks = [regex]::Matches($content, '(?is)<VirtualHost\s+\*:([0-9]+)\s*>.*?</VirtualHost>')
-$http = @($blocks | Where-Object { $_.Groups[1].Value -eq '80' -and $_.Value -match '(?im)^\s*ServerName\s+pruebas\.cobaemex\.edu\.mx\s*$' })
-$https = @($blocks | Where-Object { $_.Groups[1].Value -eq '443' -and $_.Value -match '(?im)^\s*ServerName\s+pruebas\.cobaemex\.edu\.mx\s*$' })
+$http = @($blocks | Where-Object { $_.Groups[1].Value -eq '80' -and $_.Value -match '(?im)^[ \t]*ServerName[ \t]+pruebas\.cobaemex\.edu\.mx[ \t]*\r?$' })
+$https = @($blocks | Where-Object { $_.Groups[1].Value -eq '443' -and $_.Value -match '(?im)^[ \t]*ServerName[ \t]+pruebas\.cobaemex\.edu\.mx[ \t]*\r?$' })
 if ($http.Count -ne 1 -or $https.Count -ne 1) {
     throw 'Se esperaba un VirtualHost :80 y uno :443 para pruebas.cobaemex.edu.mx. No se modifico Apache.'
 }
-if ($https[0].Value -notmatch '(?im)^\s*SSLEngine\s+on\s*$' -or
-    $https[0].Value -notmatch '(?im)^\s*SSLCertificateFile\s+' -or
-    $https[0].Value -notmatch '(?im)^\s*SSLCertificateKeyFile\s+') {
+
+$block = $https[0].Value
+if ($block -notmatch '(?im)^[ \t]*SSLEngine[ \t]+on[ \t]*\r?$' -or
+    $block -notmatch '(?im)^[ \t]*SSLCertificateFile[ \t]+' -or
+    $block -notmatch '(?im)^[ \t]*SSLCertificateKeyFile[ \t]+') {
     throw 'El VirtualHost HTTPS no tiene los certificados esperados. No se modifico Apache.'
 }
 
-$block = $https[0].Value
-$escapedOldRoot = [regex]::Escape($oldRoot)
-$escapedPublic = [regex]::Escape($public)
-$usesOldRoot = $block -match "(?im)^\s*DocumentRoot\s+`"$escapedOldRoot`"\s*$" -and
-    $block -match "(?im)^\s*<Directory\s+`"$escapedOldRoot`">\s*$"
-$usesLaravel = $block -match "(?im)^\s*DocumentRoot\s+`"$escapedPublic`"\s*$" -and
-    $block -match "(?im)^\s*<Directory\s+`"$escapedPublic`">\s*$"
-if (-not $usesOldRoot -and -not $usesLaravel) {
-    throw 'El VirtualHost de pruebas difiere del proporcionado. Revisalo antes de cambiarlo.'
-}
-if ($usesOldRoot -and
-    ([regex]::Matches($block, $escapedOldRoot, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase).Count -ne 2 -or
-    [regex]::Matches($block, '(?im)^[ \t]*Options[ \t]+All[ \t]*$').Count -ne 1)) {
-    throw 'La estructura del VirtualHost no coincide con la esperada. No se modifico Apache.'
+$documentPattern = '(?im)^([ \t]*)DocumentRoot[ \t]+(?:"[^"\r\n]+"|[^\r\n]+)[ \t]*\r?$'
+$directories = [regex]::Matches($block, '(?is)<Directory[ \t]+[^>]+>.*?</Directory>')
+if ([regex]::Matches($block, $documentPattern).Count -ne 1 -or $directories.Count -ne 1) {
+    throw 'El VirtualHost de pruebas tiene varias rutas o directorios. Revisalo antes de cambiarlo.'
 }
 
-if (-not (Test-Path -LiteralPath $authFile -PathType Leaf)) {
-    New-Item -ItemType Directory -Path $authDir -Force | Out-Null
-    $secret = Read-Host 'Contrasena adicional para el sitio de pruebas (minimo 12 caracteres)' -AsSecureString
-    if ($secret.Length -lt 12) { throw 'La contrasena adicional debe tener al menos 12 caracteres.' }
-    $pointer = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
-    try {
-        $plain = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
-        $ErrorActionPreference = 'Continue'
-        $result = $plain | & $htpasswd -i -B -c $authFile 'ccyf-pruebas' 2>&1 | Out-String
-        $code = $LASTEXITCODE
-        $ErrorActionPreference = 'Stop'
-        if ($code -ne 0) { throw "No se pudo crear el acceso adicional: $result" }
-    } finally {
-        $plain = $null
-        $secret.Dispose()
-        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
-        $ErrorActionPreference = 'Stop'
-    }
-    Write-Host 'Acceso adicional creado para el usuario ccyf-pruebas.'
+$directory = $directories[0].Value
+$openDirectory = '(?im)^([ \t]*)<Directory[ \t]+[^>]+>[ \t]*\r?$'
+if ([regex]::Matches($directory, $openDirectory).Count -ne 1) {
+    throw 'No se pudo identificar el directorio publico del VirtualHost.'
 }
-if ([System.IO.File]::ReadAllText($authFile) -notmatch '(?m)^ccyf-pruebas:') {
-    throw "El archivo de acceso no contiene al usuario ccyf-pruebas: $authFile"
+$directory = [regex]::Replace($directory, $openDirectory, '${1}<Directory "' + $public + '">')
+$directory = [regex]::Replace($directory, '(?im)^([ \t]*)Options[ \t]+All[ \t]*\r?$', '${1}Options -Indexes +FollowSymLinks')
+$directory = [regex]::Replace($directory, '(?im)^[ \t]*Auth(?:Type|Name|UserFile)[ \t]+[^\r\n]*\r?\n?', '')
+$requirePattern = '(?im)^([ \t]*)Require[ \t]+[^\r\n]+\r?$'
+if ([regex]::Matches($directory, $requirePattern).Count -ne 1) {
+    throw 'El directorio de pruebas tiene reglas de acceso no previstas. No se modifico Apache.'
+}
+$directory = [regex]::Replace($directory, $requirePattern, '${1}Require all granted')
+
+$updatedBlock = $block.Replace($directories[0].Value, $directory)
+$updatedBlock = [regex]::Replace($updatedBlock, $documentPattern, '${1}DocumentRoot "' + $public + '"')
+if ($updatedBlock -match '(?im)^[ \t]*Auth(?:Type|Name|UserFile)[ \t]+' -or
+    $updatedBlock -notmatch '(?im)^[ \t]*Require[ \t]+all[ \t]+granted[ \t]*\r?$') {
+    throw 'El VirtualHost conserva otra proteccion de acceso. Revisalo antes de hacerlo publico.'
 }
 
-$updatedHttp = $http[0].Value
-$oldRedirect = 'https://%{HTTP_HOST}%{REQUEST_URI}'
-$canonicalRedirect = 'https://pruebas.cobaemex.edu.mx%{REQUEST_URI}'
-if ($updatedHttp.Contains($oldRedirect)) {
-    $updatedHttp = $updatedHttp.Replace($oldRedirect, $canonicalRedirect)
-} elseif (-not $updatedHttp.Contains($canonicalRedirect)) {
-    throw 'El redireccionamiento HTTP de pruebas difiere del esperado.'
-}
-
-$updatedBlock = $block
-if ($usesOldRoot) {
-    $updatedBlock = [regex]::Replace($updatedBlock, $escapedOldRoot, $public, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    $updatedBlock = [regex]::Replace($updatedBlock, '(?im)^([ \t]*)Options[ \t]+All[ \t]*$', '${1}Options -Indexes +FollowSymLinks')
-}
-$requireAll = '(?im)^([ \t]*)Require[ \t]+all[ \t]+granted[ \t]*$'
-if ([regex]::Matches($updatedBlock, $requireAll).Count -eq 1) {
-    $authLines = '${1}AuthType Basic' + "`r`n" +
-        '${1}AuthName "CCyF pruebas"' + "`r`n" +
-        '${1}AuthUserFile "' + $authFileApache + '"' + "`r`n" +
-        '${1}Require valid-user'
-    $updatedBlock = [regex]::Replace($updatedBlock, $requireAll, $authLines)
-} elseif ($updatedBlock -notmatch '(?im)^\s*AuthType\s+Basic\s*$' -or
-    $updatedBlock -notmatch "(?im)^\s*AuthUserFile\s+`"$([regex]::Escape($authFileApache))`"\s*$" -or
-    $updatedBlock -notmatch '(?im)^\s*Require\s+valid-user\s*$') {
-    throw 'El control de acceso del VirtualHost es distinto del esperado.'
-}
-if ($updatedBlock -match $requireAll) { throw 'El VirtualHost aun permite acceso sin contrasena.' }
-
+$alias = [regex]::Match($updatedBlock, '(?im)^[ \t]*ServerAlias[ \t]+www\.pruebas\.cobaemex\.edu\.mx[ \t]*\r?$')
 $wwwRedirect = 'RewriteCond %{HTTP_HOST} ^www\.pruebas\.cobaemex\.edu\.mx$ [NC]'
-if (-not $updatedBlock.Contains($wwwRedirect)) {
-    $alias = [regex]::Match($updatedBlock, '(?im)^[ \t]*ServerAlias[ \t]+www\.pruebas\.cobaemex\.edu\.mx[ \t]*$')
-    if (-not $alias.Success) { throw 'Falta el alias www del VirtualHost HTTPS.' }
+if ($alias.Success -and -not $updatedBlock.Contains($wwwRedirect)) {
     $canonical = "`r`n    RewriteEngine On`r`n    $wwwRedirect`r`n    RewriteRule ^ https://pruebas.cobaemex.edu.mx%{REQUEST_URI} [R=301,L,NE]"
     $updatedBlock = $updatedBlock.Substring(0, $alias.Index + $alias.Length) + $canonical +
         $updatedBlock.Substring($alias.Index + $alias.Length)
 }
 
+$updatedHttp = $http[0].Value.Replace('https://%{HTTP_HOST}%{REQUEST_URI}', 'https://pruebas.cobaemex.edu.mx%{REQUEST_URI}')
 $updated = $content
 $edits = @(
     [pscustomobject]@{ Index = $http[0].Index; Length = $http[0].Length; Text = $updatedHttp },
@@ -132,7 +88,7 @@ foreach ($edit in $edits) {
     $updated = $updated.Substring(0, $edit.Index) + $edit.Text + $updated.Substring($edit.Index + $edit.Length)
 }
 if ($updated -eq $content) {
-    Write-Host 'El VirtualHost de pruebas ya apunta a Laravel y exige la contrasena adicional.'
+    Write-Host 'El VirtualHost de pruebas ya apunta a Laravel y permite acceso publico.'
     exit 0
 }
 
