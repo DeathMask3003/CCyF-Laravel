@@ -53,13 +53,13 @@ class OfficeReviewController extends Controller
         $records = new LengthAwarePaginator($all->forPage($page, 15)->values(), $all->count(), 15, $page, [
             'path' => $request->url(), 'query' => $request->query(),
         ]);
-        $records->getCollection()->each(function ($record) use ($resultPdf, $evaluation): void {
+        $records->getCollection()->each(function ($record) use ($resultPdf, $evaluation, $isContestant): void {
             $record->resultado_pdf_disponible = $record->origen === 'actual'
                 ? $record->estado === 'Finalizado'
                     && in_array($record->decision, ['designado', 'no_designado', 'no_aceptado'], true)
                 : $resultPdf->historical((int) $record->id, (int) $record->designado === 1) !== null;
             $service = (int) $record->legacy_servicio_id;
-            $record->evaluacion_pdf_disponible = $record->estado === 'Finalizado'
+            $record->evaluacion_pdf_disponible = ! $isContestant && $record->estado === 'Finalizado'
                 && in_array($service, [3, 4], true)
                 && $evaluation->source($record->origen, (int) $record->id,
                     $service === 3 ? 'cafeteria' : 'fotocopiado') !== null;
@@ -97,7 +97,8 @@ class OfficeReviewController extends Controller
             });
 
         $service = (int) $registration->legacy_servicio_id === 3 ? 'cafeteria' : 'fotocopiado';
-        $finalEvaluationAvailable = $registration->estado === 'Finalizado'
+        $finalEvaluationAvailable = ! $menu->isContestant($request->user())
+            && $registration->estado === 'Finalizado'
             && in_array((int) $registration->legacy_servicio_id, [3, 4], true)
             && $evaluation->source('actual', $record, $service) !== null;
 
@@ -133,14 +134,17 @@ class OfficeReviewController extends Controller
             'url' => route('revision.historical-file', [$record, $key]),
         ]);
         $resultadoPdfDisponible = $resultPdf->historical($record, (int) $registration->doc_designado === 1) !== null;
-        $finalEvaluationAvailable = $evaluation->source('historico', $record, $service) !== null;
+        $isContestant = $menu->isContestant($request->user());
+        $finalEvaluationAvailable = ! $isContestant
+            && $evaluation->source('historico', $record, $service) !== null;
 
-        return view('revision.historical', compact('registration', 'requirements', 'previewDocuments', 'resultadoPdfDisponible', 'finalEvaluationAvailable'));
+        return view('revision.historical', compact('registration', 'requirements', 'previewDocuments', 'resultadoPdfDisponible', 'finalEvaluationAvailable', 'isContestant'));
     }
 
     public function historicalFinalEvaluationPdf(int $record, Request $request, LegacyMenu $menu,
         FinalEvaluationReport $evaluation, PrevaluationRecords $prevaluations): Response
     {
+        abort_if($menu->isContestant($request->user()), 403);
         $registration = DB::connection('legacy')->table('tm_documento as d')
             ->leftJoin('tm_usuario as u', 'u.usu_id', '=', 'd.usu_id')
             ->leftJoin('tm_areas as p', 'p.area_id', '=', 'd.area_id')
@@ -167,6 +171,7 @@ class OfficeReviewController extends Controller
     public function localFinalEvaluationPdf(int $record, Request $request, LegacyMenu $menu,
         FinalEvaluationReport $evaluation, PrevaluationRecords $prevaluations): Response
     {
+        abort_if($menu->isContestant($request->user()), 403);
         $registration = $this->localRecords()->where('registro.id', $record)
             ->where('registro.estado', 'Finalizado')->first();
         abort_unless($registration, 404);

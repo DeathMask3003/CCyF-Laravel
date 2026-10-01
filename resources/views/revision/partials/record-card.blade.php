@@ -61,7 +61,7 @@
             @if (! $pending && ($record->resultado_pdf_disponible ?? false))
                 <a class="button button-link" href="{{ $isHistorical ? route('revision.historical-result-pdf', $record->id) : route('revision.result-letter-pdf', $record->id) }}" target="_blank" rel="noopener">{{ $isDesignated ? 'Carta de designación' : ($isNotAccepted ? 'Carta de no aceptación' : 'Carta de no designación') }} <span aria-hidden="true">↗</span></a>
             @endif
-            @if (! $pending && ($record->evaluacion_pdf_disponible ?? false))
+            @if (! $isContestant && ! $pending && ($record->evaluacion_pdf_disponible ?? false))
                 <a class="outline-button button-link" href="{{ $isHistorical ? route('revision.historical-final-evaluation-pdf', $record->id) : route('revision.final-evaluation-pdf', $record->id) }}" target="_blank" rel="noopener">Evaluación PDF <span aria-hidden="true">↗</span></a>
             @endif
         </div>

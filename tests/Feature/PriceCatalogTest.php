@@ -1185,6 +1185,24 @@ class PriceCatalogTest extends TestCase
         }
         $this->get('/convocatorias-finalizadas/historico/702/evaluacion-final.pdf')->assertNotFound();
         $this->get('/convocatorias-finalizadas/historico/999/evaluacion-final.pdf')->assertNotFound();
+
+        DB::table('ccyf_roles')->insert([
+            'rol_id' => 1, 'legacy_rol_id' => 1, 'rol_nom' => 'Concursante', 'est' => 1,
+        ]);
+        DB::table('ccyf_role_permissions')->insert([
+            'rol_id' => 1, 'menu_key' => 'NuevoOficio', 'allowed' => 1,
+        ]);
+        DB::table('ccyf_usuarios')->where('usu_id', 2)->update(['rol_id' => 1]);
+        $this->asUser(2);
+        $this->get('/convocatorias-finalizadas')->assertOk()
+            ->assertDontSee('/historico/700/evaluacion-final.pdf', false)
+            ->assertDontSee('/historico/701/evaluacion-final.pdf', false);
+        $this->get('/convocatorias-finalizadas/historico/700')->assertOk()
+            ->assertSee('Carta de designación')
+            ->assertDontSee('Evaluación final')
+            ->assertDontSee('/historico/700/evaluacion-final.pdf', false);
+        $this->get('/convocatorias-finalizadas/historico/700/evaluacion-final.pdf')->assertForbidden();
+        $this->get('/convocatorias-finalizadas/historico/701/evaluacion-final.pdf')->assertForbidden();
     }
 
     public function test_finalized_current_record_shows_its_prevaluation_pdf(): void
@@ -1208,6 +1226,25 @@ class PriceCatalogTest extends TestCase
         $response = $this->get("/expedientes/{$record}/evaluacion-final.pdf");
         $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertStringStartsWith('%PDF-', $response->getContent());
+
+        DB::table('ccyf_roles')->insert([
+            'rol_id' => 1, 'legacy_rol_id' => 1, 'rol_nom' => 'Concursante', 'est' => 1,
+        ]);
+        DB::table('ccyf_role_permissions')->insert([
+            'rol_id' => 1, 'menu_key' => 'NuevoOficio', 'allowed' => 1,
+        ]);
+        DB::table('ccyf_usuarios')->where('usu_id', 2)->update(['rol_id' => 1]);
+        $this->asUser(2);
+        $this->get('/convocatorias-finalizadas')->assertOk()
+            ->assertSee("/expedientes/{$record}/carta-resultado.pdf", false)
+            ->assertDontSee("/expedientes/{$record}/evaluacion-final.pdf", false);
+        $this->get("/expedientes/{$record}")->assertOk()
+            ->assertSee('Ver carta de no designación PDF')
+            ->assertDontSee('Hoja final de evaluación')
+            ->assertDontSee("/expedientes/{$record}/evaluacion-final.pdf", false);
+        $this->get("/expedientes/{$record}/carta-resultado.pdf")->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->get("/expedientes/{$record}/evaluacion-final.pdf")->assertForbidden();
     }
 
     public function test_finalized_current_record_shows_its_designation_letter_in_list_and_detail(): void
