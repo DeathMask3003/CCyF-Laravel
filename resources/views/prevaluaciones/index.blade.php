@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260930-1"><link rel="stylesheet" href="{{ asset('css/prevaluation-summary.css') }}?v=20260923-2"><link rel="stylesheet" href="{{ asset('css/prevaluation-assignments.css') }}?v=20260923-1">@endpush
+@push('head')<link rel="stylesheet" href="{{ asset('css/prevaluaciones.css') }}?v=20260930-2"><link rel="stylesheet" href="{{ asset('css/prevaluation-summary.css') }}?v=20260923-2"><link rel="stylesheet" href="{{ asset('css/prevaluation-assignments.css') }}?v=20260923-1">@endpush
 
 @section('title', 'Prevaluaciones')
 
