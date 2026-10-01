@@ -807,7 +807,8 @@ class PriceCatalogTest extends TestCase
         Mail::assertSent(DecisionNotice::class, 3);
         Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
             return $mail->audience === 'participant' && $mail->hasTo('persona@example.test')
-                && count($mail->attachments()) === 1;
+                && count($mail->attachments()) === 1
+                && str_contains($mail->render(), 'Se adjunta la carta PDF del resultado.');
         });
         Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail) use ($requirements): bool {
             $attachments = $mail->attachments();
@@ -818,6 +819,7 @@ class PriceCatalogTest extends TestCase
                 && $mail->hasCc('cafeteria.fotocopiado@cobaemex.edu.mx')
                 && count($mail->documents) === $requirements->count()
                 && count($attachments) === $requirements->count() + 1
+                && str_contains($mail->render(), 'documentación del expediente')
                 && str_starts_with($mail->letter, '%PDF-');
         });
         Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
@@ -825,6 +827,7 @@ class PriceCatalogTest extends TestCase
                 && $mail->hasTo('depto.contabilidad@cobaemex.edu.mx')
                 && count($mail->documents) === 0
                 && count($mail->attachments()) === 1
+                && str_contains($mail->render(), 'Departamento de Presupuesto y Contabilidad')
                 && str_starts_with($mail->letter, '%PDF-');
         });
         $this->assertDatabaseHas('ccyf_result_mailings', [
@@ -982,7 +985,8 @@ class PriceCatalogTest extends TestCase
         Mail::assertSent(DecisionNotice::class, 2);
         Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
             return $mail->audience === 'participant' && $mail->hasTo('persona@example.test')
-                && $mail->record->decision === 'no_aceptado' && count($mail->attachments()) === 1;
+                && $mail->record->decision === 'no_aceptado' && count($mail->attachments()) === 1
+                && str_contains($mail->render(), 'No aceptado');
         });
         $this->assertDatabaseMissing('ccyf_result_mailings', ['audience' => 'internal']);
     }
@@ -1014,7 +1018,8 @@ class PriceCatalogTest extends TestCase
         ]);
         Mail::assertSent(DecisionNotice::class, function (DecisionNotice $mail): bool {
             return $mail->audience === 'participant' && $mail->hasTo('persona@example.test')
-                && $mail->record->decision === 'no_designado' && count($mail->attachments()) === 1;
+                && $mail->record->decision === 'no_designado' && count($mail->attachments()) === 1
+                && str_contains($mail->render(), 'No designado');
         });
         $this->assertDatabaseMissing('ccyf_result_mailings', ['audience' => 'internal']);
     }

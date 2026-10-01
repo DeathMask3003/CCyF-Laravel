@@ -14,7 +14,10 @@
             <tr><td style="padding:8px;border-bottom:1px solid #eee4e8;color:#806875">Plantel</td><td style="padding:8px;border-bottom:1px solid #eee4e8">{{ $record->plantel_nombre }}</td></tr>
         </table>
         <p style="padding:13px 16px;background:#f8eff3;border-left:4px solid #611232"><strong>Resultado: {{ match ($record->decision) { 'designado' => 'Designado', 'no_aceptado' => 'No aceptado', default => 'No designado' } }}</strong><br>{{ $record->respuesta }}</p>
-        <p style="font-size:13px;color:#695c63">Se adjunta la carta PDF del resultado@if($documents). Esta es la parte {{ $part }} de {{ $totalParts }} de la documentación del expediente ({{ count($documents) }} {{ count($documents) === 1 ? 'archivo' : 'archivos' }} en este mensaje)@endif.</p>
+        <p style="font-size:13px;color:#695c63">Se adjunta la carta PDF del resultado.</p>
+        @if ($documents)
+            <p style="font-size:13px;color:#695c63">Esta es la parte {{ $part }} de {{ $totalParts }} de la documentación del expediente ({{ count($documents) }} {{ count($documents) === 1 ? 'archivo' : 'archivos' }} en este mensaje).</p>
+        @endif
         <p style="font-size:12px;color:#8b7d84;margin-bottom:0">Conserve este correo y consulte el expediente en el sistema CCyF.</p>
     </div>
 </div>
