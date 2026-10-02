@@ -48,11 +48,11 @@ foreach ($port in @('80', '443')) {
         throw 'El VirtualHost HTTPS de pruebas no tiene los certificados esperados.'
     }
     if ($block.Contains($rule)) { continue }
-    $alias = [regex]::Matches($block, '(?im)^[ \t]*ServerAlias[ \t]+www\.pruebas\.cobaemex\.edu\.mx[ \t]*\r?\n')
-    if ($alias.Count -ne 1) { throw "No se encontro el alias esperado en el puerto $port." }
+    $serverName = [regex]::Matches($block, '(?m)^[ \t]*ServerName[ \t]+pruebas\.cobaemex\.edu\.mx[ \t]*(?:\r?\n|$)')
+    if ($serverName.Count -ne 1) { throw "No se encontro el ServerName esperado en el puerto $port." }
     $newline = if ($block.Contains("`r`n")) { "`r`n" } else { "`n" }
     $redirect = "    RewriteEngine On${newline}    $rule${newline}"
-    $updatedBlock = $block.Insert($alias[0].Index + $alias[0].Length, $redirect)
+    $updatedBlock = $block.Insert($serverName[0].Index + $serverName[0].Length, $redirect)
     $edits += [pscustomobject]@{ Index = $matches[0].Index; Length = $matches[0].Length; Text = $updatedBlock }
 }
 
