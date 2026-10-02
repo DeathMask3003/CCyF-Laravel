@@ -1,5 +1,7 @@
 # CCyF Laravel en pruebas.cobaemex.edu.mx
 
+> **Estado del servidor al 2 de octubre de 2026:** `ccyf.cobaemex.edu.mx` ya sirve Laravel desde `C:\xampp\htdocs\ccyf-laravel\public` con la base `ccyflaravel_prod`. El dominio `pruebas.cobaemex.edu.mx` también apunta a ese mismo checkout. Las instrucciones de instalación inicial que siguen describen una etapa anterior y no deben repetirse en el servidor actual. Para la actualización pendiente del PDF destacado y la redirección de pruebas, usa [PRODUCCION_ACTUAL_WINDOWS_SERVER.md](PRODUCCION_ACTUAL_WINDOWS_SERVER.md).
+
 Esta instalación usa la copia `ccyflaravel` y los expedientes históricos ya preparados en `C:\xampp\htdocs\ccyf-laravel`. El dominio público `ccyf.cobaemex.edu.mx` continúa con el sistema original. Una copia de la base tomada antes de crear registros nuevos no incluirá esos registros.
 
 ## Publicar la instalación de pruebas por HTTPS
