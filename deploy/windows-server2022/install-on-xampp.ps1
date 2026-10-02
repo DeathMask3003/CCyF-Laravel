@@ -72,4 +72,4 @@ try {
 }
 
 Write-Host "Codigo instalado en $project"
-Write-Host 'Completa .env con credenciales, URL y correo; copia los expedientes; verifica la base ccyflaravel antes de ejecutar migraciones.'
+Write-Host 'Completa .env con credenciales, URL y correo; copia los expedientes; verifica la base indicada en DB_DATABASE antes de ejecutar migraciones.'
