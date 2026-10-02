@@ -33,14 +33,14 @@ if ($production.Count -ne 1 -or
 
 $edits = @()
 foreach ($port in @('80', '443')) {
-    $matches = @($blocks | Where-Object {
+    $hostBlocks = @($blocks | Where-Object {
         $_.Groups[1].Value -eq $port -and
         $_.Value -match '(?im)^[ \t]*ServerName[ \t]+pruebas\.cobaemex\.edu\.mx[ \t]*\r?$'
     })
-    if ($matches.Count -ne 1) {
+    if ($hostBlocks.Count -ne 1) {
         throw "Se esperaba un solo VirtualHost de pruebas en el puerto $port. No se modifico Apache."
     }
-    $block = $matches[0].Value
+    $block = $hostBlocks[0].Value
     if ($port -eq '443' -and
         ($block -notmatch '(?im)^[ \t]*SSLEngine[ \t]+on[ \t]*\r?$' -or
          $block -notmatch '(?im)^[ \t]*SSLCertificateFile[ \t]+' -or
@@ -53,7 +53,7 @@ foreach ($port in @('80', '443')) {
     $newline = if ($block.Contains("`r`n")) { "`r`n" } else { "`n" }
     $redirect = "    RewriteEngine On${newline}    $rule${newline}"
     $updatedBlock = $block.Insert($serverName[0].Index + $serverName[0].Length, $redirect)
-    $edits += [pscustomobject]@{ Index = $matches[0].Index; Length = $matches[0].Length; Text = $updatedBlock }
+    $edits += [pscustomobject]@{ Index = $hostBlocks[0].Index; Length = $hostBlocks[0].Length; Original = $block; Text = $updatedBlock }
 }
 
 if ($edits.Count -eq 0) {
@@ -63,7 +63,26 @@ if ($edits.Count -eq 0) {
 
 $updated = $content
 foreach ($edit in @($edits | Sort-Object Index -Descending)) {
+    if ($updated.Substring($edit.Index, $edit.Length) -cne $edit.Original) {
+        throw 'La posicion calculada no corresponde al VirtualHost de pruebas. No se modifico Apache.'
+    }
     $updated = $updated.Substring(0, $edit.Index) + $edit.Text + $updated.Substring($edit.Index + $edit.Length)
+}
+$updatedBlocks = [regex]::Matches($updated, '(?is)<VirtualHost\s+\*:([0-9]+)\s*>.*?</VirtualHost>')
+if ($updatedBlocks.Count -ne $blocks.Count) {
+    throw 'Cambio inesperado en la cantidad de VirtualHost. No se modifico Apache.'
+}
+for ($index = 0; $index -lt $blocks.Count; $index++) {
+    $isPruebas = $blocks[$index].Value -match '(?im)^[ \t]*ServerName[ \t]+pruebas\.cobaemex\.edu\.mx[ \t]*\r?$'
+    if (-not $isPruebas -and $updatedBlocks[$index].Value -cne $blocks[$index].Value) {
+        throw 'La simulacion alteraria otro VirtualHost. No se modifico Apache.'
+    }
+}
+$updatedProduction = @([regex]::Matches($updated, '(?is)<VirtualHost\s+\*:443\s*>.*?</VirtualHost>') | Where-Object {
+    $_.Value -match '(?im)^[ \t]*ServerName[ \t]+ccyf\.cobaemex\.edu\.mx[ \t]*\r?$'
+})
+if ($updatedProduction.Count -ne 1 -or $updatedProduction[0].Value -cne $production[0].Value) {
+    throw 'La simulacion alteraria el VirtualHost de produccion. No se modifico Apache.'
 }
 $backup = "$vhosts.ccyf-pruebas-redirect-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$(Get-Random)"
 Copy-Item -LiteralPath $vhosts -Destination $backup -ErrorAction Stop
@@ -73,6 +92,9 @@ try {
     if ($after.Code -ne 0) { throw "Apache rechazo el cambio: $($after.Output)" }
 } catch {
     Copy-Item -LiteralPath $backup -Destination $vhosts -Force
+    $restored = Test-ApacheSyntax
+    if ($restored.Code -ne 0) { throw "La restauracion del respaldo requiere revision: $($restored.Output)" }
+    Write-Host 'Apache rechazo el cambio y se restauro el archivo anterior; sintaxis nuevamente valida.'
     throw
 }
 
