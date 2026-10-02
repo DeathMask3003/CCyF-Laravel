@@ -6,8 +6,16 @@
 <div class="page-heading">
     <div><span class="eyebrow">Panel de trabajo</span><h1>Bienvenido, {{ auth()->user()->usu_area }}</h1><p>Gestiona las convocatorias y propuestas de CCyF desde este espacio.</p></div>
 </div>
+@php($ccyfMenu = app(\App\Services\LegacyMenu::class))
+@if ($ccyfMenu->isContestant(auth()->user()))
+    @php($portalBrandingService = app(\App\Services\Branding::class))
+    @php($portalDocument = $portalBrandingService->current())
+    @if ($portalBrandingService->documentFile($portalDocument))
+        <section class="portal-document-card" aria-labelledby="portal-document-title"><div class="portal-document-icon" aria-hidden="true">PDF</div><div class="portal-document-copy"><span class="eyebrow">Información para participantes</span><h2 id="portal-document-title">{{ $portalDocument->document_title }}</h2><p>{{ $portalDocument->document_description }}</p></div><a class="button button-link portal-document-open" href="{{ route('branding.document') }}" data-review-document data-document-name="{{ $portalDocument->document_title }}" data-document-mime="application/pdf">Consultar documento <span aria-hidden="true">↗</span></a></section>
+        @include('revision.document-viewer', ['viewerEyebrow' => 'Información para participantes'])
+    @endif
+@endif
 <div class="dashboard-grid">
-    @php($ccyfMenu = app(\App\Services\LegacyMenu::class))
     @if ($ccyfMenu->allows(auth()->user(), 'NuevoOficio') || $ccyfMenu->allows(auth()->user(), 'Categorias_widi'))
         <article class="feature-card"><span class="feature-icon">01</span><h2>Nuevo registro</h2><p>Presenta la propuesta completa con precios, comentarios y documentos PDF.</p><a class="text-link" href="{{ route('oficios.index') }}">Iniciar registro <span aria-hidden="true">→</span></a></article>
     @endif

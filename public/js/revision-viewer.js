@@ -138,6 +138,7 @@ if (dialog) {
         if (old) await old.destroy();
         if (version !== loadVersion) return;
         title.textContent = link.dataset.documentName || 'Documento';
+        document.getElementById('review-document-open').href = link.href;
         message.textContent = 'Preparando documento…';
         message.hidden = false;
         scroller.hidden = true;

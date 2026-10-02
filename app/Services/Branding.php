@@ -20,6 +20,9 @@ class Branding
             'title' => $saved?->title ?: 'Concurso de Cafetería y Fotocopiado',
             'motto' => $saved?->motto ?: 'Convocatorias claras. Trámites a tu alcance.',
             'logo_path' => $saved?->logo_path,
+            'document_title' => $saved?->document_title ?: 'Información para participantes',
+            'document_description' => $saved?->document_description ?: 'Consulta este documento antes de realizar tu registro.',
+            'document_path' => $saved?->document_path,
         ];
     }
 
@@ -34,6 +37,16 @@ class Branding
     {
         $path = $branding->logo_path;
         if (! is_string($path) || ! str_starts_with($path, 'ccyf/branding/') || str_contains($path, '..')) {
+            return null;
+        }
+
+        return Storage::disk('local')->exists($path) ? Storage::disk('local')->path($path) : null;
+    }
+
+    public function documentFile(object $branding): ?string
+    {
+        $path = $branding->document_path;
+        if (! is_string($path) || ! preg_match('~^ccyf/branding/documents/[a-f0-9-]+\.pdf$~i', $path)) {
             return null;
         }
 

@@ -49,6 +49,9 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/administracion/identidad', [BrandingController::class, 'edit'])->name('branding.edit');
     Route::put('/administracion/identidad', [BrandingController::class, 'update'])
         ->middleware('throttle:10,1')->name('branding.update');
+    Route::put('/administracion/identidad/documento', [BrandingController::class, 'updateDocument'])
+        ->middleware('throttle:10,1')->name('branding.document.update');
+    Route::get('/marca/documento', [BrandingController::class, 'document'])->name('branding.document');
     Route::get('/panel', fn () => view('dashboard'))->name('dashboard');
     Route::post('/salir', [AccessController::class, 'destroy'])->name('logout');
     Route::get('/mi-perfil', [ProfileController::class, 'show'])->name('perfil.show');

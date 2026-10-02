@@ -97,4 +97,69 @@ class BrandingTest extends TestCase
         ])->assertSessionHasErrors(['logo' => 'La imagen debe medir entre 80 × 80 y 4000 × 4000 píxeles.']);
         $this->assertDatabaseCount('ccyf_branding', 0);
     }
+
+    public function test_admin_publishes_and_removes_home_pdf_for_contestants(): void
+    {
+        Storage::fake('local');
+        $this->get('/marca/documento')->assertRedirect('/acceso');
+        $this->actingAs(LegacyUser::findOrFail(2));
+        $this->get('/panel')->assertOk()->assertDontSee('portal-document-card');
+        $this->get('/administracion/identidad')->assertForbidden();
+        $this->put('/administracion/identidad/documento', [
+            'document_title' => 'Guía para concursantes',
+        ])->assertForbidden();
+        $this->get('/marca/documento')->assertNotFound();
+
+        $this->actingAs(LegacyUser::findOrFail(1));
+        $this->get('/administracion/identidad')->assertOk()
+            ->assertSee('Documento destacado')->assertSee('Aún no hay PDF publicado');
+        $this->put('/administracion/identidad/documento', [
+            'document_title' => 'Guía para concursantes',
+            'document_description' => 'Consulta los pasos para participar.',
+            'document' => UploadedFile::fake()->createWithContent('guia.pdf', "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"),
+        ])->assertRedirect()->assertSessionHas('status');
+
+        $first = DB::table('ccyf_branding')->where('id', 1)->first();
+        $this->assertSame('Guía para concursantes', $first->document_title);
+        Storage::disk('local')->assertExists($first->document_path);
+        $this->get('/marca/documento')->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->get('/panel')->assertOk()->assertDontSee('portal-document-card');
+
+        $this->actingAs(LegacyUser::findOrFail(2));
+        $this->get('/panel')->assertOk()->assertSee('portal-document-card')
+            ->assertSee('Guía para concursantes')->assertSee('Consulta los pasos para participar.')
+            ->assertSee('revision-viewer.js')->assertSee('/marca/documento', false);
+        $this->get('/marca/documento')->assertOk()->assertHeader('Content-Type', 'application/pdf');
+
+        $this->actingAs(LegacyUser::findOrFail(1));
+        $this->put('/administracion/identidad/documento', [
+            'document_title' => 'Documento actualizado',
+            'document' => UploadedFile::fake()->createWithContent('nuevo.pdf', "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"),
+        ])->assertRedirect();
+        Storage::disk('local')->assertMissing($first->document_path);
+        $second = DB::table('ccyf_branding')->where('id', 1)->value('document_path');
+        Storage::disk('local')->assertExists($second);
+
+        $this->put('/administracion/identidad/documento', [
+            'document_title' => 'Documento actualizado', 'remove_document' => '1',
+        ])->assertRedirect();
+        Storage::disk('local')->assertMissing($second);
+        $this->assertNull(DB::table('ccyf_branding')->where('id', 1)->value('document_path'));
+        $this->get('/marca/documento')->assertNotFound();
+        $this->actingAs(LegacyUser::findOrFail(2));
+        $this->get('/panel')->assertOk()->assertDontSee('portal-document-card');
+    }
+
+    public function test_home_document_rejects_non_pdf_and_does_not_change_published_file(): void
+    {
+        Storage::fake('local');
+        $this->actingAs(LegacyUser::findOrFail(1));
+        $this->put('/administracion/identidad/documento', [
+            'document_title' => 'Archivo incorrecto',
+            'document' => UploadedFile::fake()->createWithContent('falso.pdf', 'No es un PDF'),
+        ])->assertSessionHasErrors('document');
+        $this->assertDatabaseCount('ccyf_branding', 0);
+    }
 }

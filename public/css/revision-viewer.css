@@ -6,6 +6,7 @@
 .review-document-header h2{margin:5px 0 0;font-size:clamp(1.1rem,2vw,1.55rem);line-height:1.25}
 .review-document-header button{display:grid;place-items:center;flex:none;width:42px;height:42px;border:1px solid rgba(255,255,255,.55);border-radius:11px;background:rgba(255,255,255,.12);color:#fff;font-size:1.7rem;line-height:1;cursor:pointer}
 .review-document-header button:hover{background:rgba(255,255,255,.25)}
+.review-document-header-actions{display:flex;align-items:center;gap:10px}.review-document-header-actions a{color:#fff;text-decoration:none;font-size:.78rem;font-weight:750;white-space:nowrap;padding:10px 12px;border:1px solid rgba(255,255,255,.4);border-radius:9px}.review-document-header-actions a:hover{background:rgba(255,255,255,.16)}
 .review-document-message{margin:auto;padding:26px;text-align:center;color:#695963;line-height:1.55}
 .review-document-scroll,.review-document-image-wrap{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;background:#ece7e9}
 .review-document-pages{display:flex;flex-direction:column;align-items:center;gap:16px;width:max-content;min-width:100%;padding:17px}
@@ -21,3 +22,4 @@
 .review-document-dialog [hidden]{display:none!important}
 @media(max-width:720px){.review-document-dialog{inset:5px;width:calc(100vw - 10px);height:calc(100vh - 10px);border-radius:11px}.review-document-header{padding:13px 15px}.review-document-header button{width:38px;height:38px}.review-document-toolbar{gap:5px;padding:6px}.review-document-toolbar button{width:32px;height:32px}.review-document-pages{padding:9px;gap:10px}}
 @supports(height:100dvh){.review-document-dialog{height:calc(100dvh - 24px)}@media(max-width:720px){.review-document-dialog{height:calc(100dvh - 10px)}}}
+@media(max-width:480px){.review-document-header-actions{gap:6px}.review-document-header-actions a{font-size:.7rem;padding:8px}.review-document-header h2{font-size:1rem}}

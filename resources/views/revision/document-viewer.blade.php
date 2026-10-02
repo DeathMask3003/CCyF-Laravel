@@ -1,9 +1,9 @@
-@push('head')<link rel="stylesheet" href="{{ asset('css/revision-viewer.css') }}?v=20260922-1">@endpush
+@push('head')<link rel="stylesheet" href="{{ asset('css/revision-viewer.css') }}?v=20261002-1">@endpush
 <dialog id="review-document-dialog" class="review-document-dialog" aria-labelledby="review-document-title">
     <div class="review-document-shell">
         <header class="review-document-header">
-            <div><span>Documentación del permisionario</span><h2 id="review-document-title">Documento</h2></div>
-            <button type="button" id="review-document-close" aria-label="Cerrar documento">×</button>
+            <div><span>{{ $viewerEyebrow ?? 'Documentación del permisionario' }}</span><h2 id="review-document-title">Documento</h2></div>
+            <div class="review-document-header-actions"><a id="review-document-open" href="#" target="_blank" rel="noopener">Abrir archivo ↗</a><button type="button" id="review-document-close" aria-label="Cerrar documento">×</button></div>
         </header>
         <div id="review-document-message" class="review-document-message" role="status">Preparando documento…</div>
         <div id="review-document-scroll" class="review-document-scroll" hidden>
@@ -21,4 +21,4 @@
         </footer>
     </div>
 </dialog>
-@push('scripts')<script type="module" src="{{ asset('js/revision-viewer.js') }}?v=20260922-1"></script>@endpush
+@push('scripts')<script type="module" src="{{ asset('js/revision-viewer.js') }}?v=20261002-1"></script>@endpush

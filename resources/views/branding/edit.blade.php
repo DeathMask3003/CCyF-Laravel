@@ -3,7 +3,7 @@
 @section('title', 'Identidad del portal')
 
 @section('content')
-<div class="page-heading identity-heading"><div><span class="eyebrow">Administración · CCyF</span><h1>Identidad del portal</h1><p>Define la imagen y los textos que verán los participantes al entrar a CCyF.</p></div></div>
+<div class="page-heading identity-heading"><div><span class="eyebrow">Administración · CCyF</span><h1>Identidad del portal</h1><p>Administra la imagen, los textos y el documento destacado que verán los participantes.</p></div></div>
 @if($errors->any())<div class="form-errors" role="alert">Revisa los campos marcados para guardar los cambios.</div>@endif
 <div class="brand-editor">
     <section class="panel" aria-labelledby="brand-form-title">
@@ -23,5 +23,18 @@
         <div class="brand-preview-body"><span>Vista previa</span><h2 id="brand-preview-motto">{{ old('motto', $branding->motto) }}</h2><p id="brand-preview-title">{{ old('title', $branding->title) }}</p></div>
     </aside>
 </div>
-<script src="{{ asset('js/branding-preview.js') }}?v=20260930-1" defer></script>
+<section class="panel brand-document-panel" aria-labelledby="brand-document-title">
+    <div class="brand-document-intro"><div><span class="eyebrow">Inicio del permisionario</span><h2 id="brand-document-title">Documento destacado</h2><p>Publica un PDF para que los concursantes lo consulten desde una tarjeta en Inicio. Se abrirá en un visor de varias páginas, también en tabletas.</p></div><span class="pill {{ $documentAvailable ? 'pill-ready' : 'pill-neutral' }}">{{ $documentAvailable ? 'Publicado' : 'Sin documento' }}</span></div>
+    <form method="post" action="{{ route('branding.document.update') }}" enctype="multipart/form-data" data-portal-document-form data-current-document="{{ $documentAvailable ? route('branding.document') : '' }}">
+        @csrf @method('PUT')
+        <div class="brand-document-fields">
+            <div><label for="document-title">Título de la tarjeta</label><input id="document-title" name="document_title" type="text" maxlength="120" value="{{ old('document_title', $branding->document_title) }}" required><small class="field-help">Ejemplo: Guía para participar en la convocatoria.</small>@error('document_title')<span class="field-error" role="alert">{{ $message }}</span>@enderror</div>
+            <div><label for="document-description">Descripción breve</label><input id="document-description" name="document_description" type="text" maxlength="240" value="{{ old('document_description', $branding->document_description) }}"><small class="field-help">Aparecerá debajo del título en Inicio.</small>@error('document_description')<span class="field-error" role="alert">{{ $message }}</span>@enderror</div>
+        </div>
+        <div class="brand-document-upload"><div><label for="document-file">Archivo PDF</label><input id="document-file" name="document" type="file" accept="application/pdf,.pdf" aria-describedby="document-file-status"><small class="field-help">Máximo 15 MB. Al reemplazarlo, el PDF anterior se elimina después de guardar.</small>@error('document')<span class="field-error" role="alert">{{ $message }}</span>@enderror</div><div class="brand-file-status" id="document-file-status" role="status" aria-live="polite" data-state="neutral"><strong>{{ $documentAvailable ? 'PDF publicado' : 'Aún no hay PDF publicado' }}</strong><small>{{ $documentAvailable ? 'Puedes consultarlo o elegir uno nuevo.' : 'Selecciona un archivo para mostrarlo a los permisionarios.' }}</small></div></div>
+        <div class="brand-document-actions">@if($documentAvailable)<label class="brand-remove" for="remove-document"><input id="remove-document" type="checkbox" name="remove_document" value="1" @checked(old('remove_document'))>Retirar PDF del inicio</label>@endif<div><a id="document-preview-link" class="outline-button button-link" href="{{ $documentAvailable ? route('branding.document') : '#' }}" data-review-document data-document-name="{{ $branding->document_title }}" data-document-mime="application/pdf" @if(! $documentAvailable) hidden @endif>Vista previa PDF ↗</a><button class="button" type="submit" data-document-submit>Guardar documento</button></div></div>
+    </form>
+</section>
+@include('revision.document-viewer', ['viewerEyebrow' => 'Documento para participantes'])
+<script src="{{ asset('js/branding-preview.js') }}?v=20261002-1" defer></script>
 @endsection
