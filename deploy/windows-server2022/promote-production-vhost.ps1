@@ -1,6 +1,7 @@
 param(
     [string] $XamppRoot = 'C:\xampp',
-    [string] $ProjectRoot = 'C:\xampp\htdocs\ccyf-laravel'
+    [string] $ProjectRoot = 'C:\xampp\htdocs\ccyf-laravel-prod',
+    [switch] $CheckOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,6 +17,10 @@ $encoding = [System.Text.Encoding]::GetEncoding(28591)
 
 if (-not $project.StartsWith($htdocs + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "El proyecto debe estar dentro de $htdocs."
+}
+$stagingProject = [System.IO.Path]::GetFullPath((Join-Path $htdocs 'ccyf-laravel')).TrimEnd('\')
+if ($project.Equals($stagingProject, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Produccion debe usar un checkout separado del sitio de pruebas.'
 }
 foreach ($path in @($apache, $vhosts, (Join-Path $project 'public\index.php'), $envFile)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Falta el archivo: $path" }
@@ -164,6 +169,12 @@ foreach ($edit in $edits) {
 }
 if ($updated -eq $content) {
     Write-Host 'El VirtualHost de produccion ya apunta a Laravel y permite acceso publico.'
+    exit 0
+}
+
+if ($CheckOnly) {
+    Write-Host "Validacion completada. El VirtualHost cambiaria a $public."
+    Write-Host 'No se modifico Apache. Ejecuta de nuevo sin -CheckOnly durante el corte.'
     exit 0
 }
 
