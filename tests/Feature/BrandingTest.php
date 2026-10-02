@@ -3,8 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\LegacyUser;
+use App\Services\Branding;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -37,6 +40,23 @@ class BrandingTest extends TestCase
     {
         $this->get('/acceso')->assertOk()->assertSee('images/ccyf-default.svg')
             ->assertSee('Logo de Concurso de Cafetería y Fotocopiado');
+    }
+
+    public function test_existing_branding_row_can_be_read_before_document_migration(): void
+    {
+        DB::table('ccyf_branding')->insert([
+            'id' => 1, 'title' => 'CCyF existente', 'motto' => 'Lema anterior',
+            'logo_path' => null, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        Schema::table('ccyf_branding', function (Blueprint $table): void {
+            $table->dropColumn(['document_title', 'document_description', 'document_path']);
+        });
+
+        $current = app(Branding::class)->current();
+        $this->assertSame('CCyF existente', $current->title);
+        $this->assertSame('Información para participantes', $current->document_title);
+        $this->assertNull($current->document_path);
+        $this->actingAs(LegacyUser::findOrFail(1))->get('/panel')->assertOk();
     }
 
     public function test_only_administrator_can_change_branding(): void

@@ -20,9 +20,9 @@ class Branding
             'title' => $saved?->title ?: 'Concurso de Cafetería y Fotocopiado',
             'motto' => $saved?->motto ?: 'Convocatorias claras. Trámites a tu alcance.',
             'logo_path' => $saved?->logo_path,
-            'document_title' => $saved?->document_title ?: 'Información para participantes',
-            'document_description' => $saved?->document_description ?: 'Consulta este documento antes de realizar tu registro.',
-            'document_path' => $saved?->document_path,
+            'document_title' => data_get($saved, 'document_title') ?: 'Información para participantes',
+            'document_description' => data_get($saved, 'document_description') ?: 'Consulta este documento antes de realizar tu registro.',
+            'document_path' => data_get($saved, 'document_path'),
         ];
     }
 
