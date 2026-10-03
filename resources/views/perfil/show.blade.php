@@ -120,15 +120,20 @@
 <script>
 document.querySelectorAll('.uppercase-field').forEach(el => el.addEventListener('input', () => { const start = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(start, start); }));
 const signatureInput = document.getElementById('firma');
+let signatureSelection = 0;
 signatureInput?.addEventListener('change', () => {
+    const version = ++signatureSelection;
     const file = signatureInput.files?.[0];
     if (!file || !file.type.startsWith('image/')) return;
     const preview = document.getElementById('signature-preview');
     let image = document.getElementById('signature-image');
     if (!image) { image = document.createElement('img'); image.id = 'signature-image'; image.alt = 'Vista previa de tu firma'; preview.replaceChildren(image); }
-    const url = URL.createObjectURL(file);
-    image.onload = () => URL.revokeObjectURL(url);
-    image.src = url;
+    const reader = new FileReader();
+    reader.onload = () => {
+        if (version !== signatureSelection || typeof reader.result !== 'string') return;
+        image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
 });
 const photoInput = document.getElementById('profile-photo');
 const profileAvatar = document.getElementById('profile-photo-preview');
@@ -138,7 +143,7 @@ const photoReset = document.getElementById('photo-preview-reset');
 if (photoInput && profileAvatar && photoMessage && photoReset) {
     const originalProfile = profileAvatar.innerHTML;
     const originalHeader = headerAvatar?.innerHTML;
-    let previewUrl = null;
+    let photoSelection = 0;
     const showMessage = (message, isError = false) => {
         photoMessage.textContent = message;
         photoMessage.hidden = !message;
@@ -147,11 +152,10 @@ if (photoInput && profileAvatar && photoMessage && photoReset) {
     const restorePreview = () => {
         profileAvatar.innerHTML = originalProfile;
         if (headerAvatar) headerAvatar.innerHTML = originalHeader;
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        previewUrl = null;
         photoReset.hidden = true;
     };
     photoInput.addEventListener('change', () => {
+        const version = ++photoSelection;
         restorePreview();
         const file = photoInput.files?.[0];
         if (!file) { showMessage(''); return; }
@@ -160,26 +164,42 @@ if (photoInput && profileAvatar && photoMessage && photoReset) {
             showMessage('Elige una imagen PNG, JPG o WEBP de máximo 3 MB.', true);
             return;
         }
-        const url = URL.createObjectURL(file);
-        previewUrl = url;
-        const image = new Image();
-        image.alt = '';
-        image.onload = () => {
-            if (previewUrl !== url) return;
-            profileAvatar.replaceChildren(image);
-            if (headerAvatar) headerAvatar.replaceChildren(image.cloneNode());
-            photoReset.hidden = false;
-            showMessage('Vista previa en el perfil y el menú. La foto aún no se ha guardado.');
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (version !== photoSelection) return;
+            if (typeof reader.result !== 'string' || !reader.result.startsWith('data:image/')) {
+                restorePreview();
+                photoInput.value = '';
+                showMessage('No se pudo leer esta imagen. Elige otro archivo.', true);
+                return;
+            }
+            const image = new Image();
+            image.alt = '';
+            image.onload = () => {
+                if (version !== photoSelection) return;
+                profileAvatar.replaceChildren(image);
+                if (headerAvatar) headerAvatar.replaceChildren(image.cloneNode());
+                photoReset.hidden = false;
+                showMessage('Vista previa en el perfil y el menú. La foto aún no se ha guardado.');
+            };
+            image.onerror = () => {
+                if (version !== photoSelection) return;
+                restorePreview();
+                photoInput.value = '';
+                showMessage('No se pudo abrir esta imagen. Elige otro archivo.', true);
+            };
+            image.src = reader.result;
         };
-        image.onerror = () => {
-            if (previewUrl !== url) return;
+        reader.onerror = () => {
+            if (version !== photoSelection) return;
             restorePreview();
             photoInput.value = '';
-            showMessage('No se pudo abrir esta imagen. Elige otro archivo.', true);
+            showMessage('No se pudo leer esta imagen. Elige otro archivo.', true);
         };
-        image.src = url;
+        reader.readAsDataURL(file);
     });
     photoReset.addEventListener('click', () => {
+        ++photoSelection;
         photoInput.value = '';
         restorePreview();
         showMessage('');
