@@ -107,6 +107,8 @@ class ProfileLocationTest extends TestCase
     {
         Storage::fake('local');
         $this->be(LegacyUser::findOrFail(1));
+        $this->get('/mi-perfil')->assertOk()
+            ->assertSee('class="account-avatar" aria-hidden="true">A</span>', false);
         $this->get('/mi-perfil/foto')->assertNotFound();
         $this->post('/mi-perfil/foto', ['foto' => UploadedFile::fake()->image('retrato.jpg', 800, 600)])
             ->assertRedirect()->assertSessionHasNoErrors();
@@ -117,7 +119,8 @@ class ProfileLocationTest extends TestCase
             ->assertRedirect()->assertSessionHasNoErrors();
         $this->assertFileExists($path);
         $this->get('/mi-perfil/foto')->assertOk()->assertHeader('Content-Type', 'image/png');
-        $this->get('/mi-perfil')->assertSee('/mi-perfil/foto', false);
+        $this->get('/mi-perfil')->assertSee('/mi-perfil/foto', false)
+            ->assertSee('class="account-avatar" aria-hidden="true"><img src="', false);
         $this->post('/mi-perfil/foto', ['foto' => UploadedFile::fake()->create('archivo.php', 1)])
             ->assertSessionHasErrors('foto');
         $this->assertFileExists($path);

@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}?v=20260929">
     <link rel="stylesheet" href="{{ asset('css/ccyf.css') }}?v=20260922-1">
     <link rel="stylesheet" href="{{ asset('css/branding.css') }}?v=20261002-1">
-    <link rel="stylesheet" href="{{ asset('css/header.css') }}?v=20260923-2">
+    <link rel="stylesheet" href="{{ asset('css/header.css') }}?v=20261003-1">
     <link rel="stylesheet" href="{{ asset('css/connectivity.css') }}?v=1">
     @stack('head')
 </head>
@@ -84,8 +84,9 @@
                     @endif
                 </nav>
                 <div class="header-account">
+                    @php($profilePhotoAvailable = app(\App\Services\ProfilePhotos::class)->pathFor(auth()->user()) !== null)
                     <details class="nav-dropdown account-dropdown">
-                        <summary title="{{ auth()->user()->usu_area }}"><span class="account-avatar" aria-hidden="true">{{ mb_strtoupper(mb_substr(auth()->user()->usu_area, 0, 1)) }}</span><span class="account-name">{{ auth()->user()->usu_area }}</span><span class="account-chevron" aria-hidden="true">⌄</span></summary>
+                        <summary title="{{ auth()->user()->usu_area }}"><span class="account-avatar" aria-hidden="true">@if($profilePhotoAvailable)<img src="{{ route('perfil.photo') }}" alt="">@else{{ mb_strtoupper(mb_substr(auth()->user()->usu_area, 0, 1)) }}@endif</span><span class="account-name">{{ auth()->user()->usu_area }}</span><span class="account-chevron" aria-hidden="true">⌄</span></summary>
                         <div class="nav-dropdown-menu">
                             <a href="{{ route('perfil.show') }}" @class(['active' => request()->routeIs('perfil.*')])>Mi perfil</a>
                             <a href="{{ route('ubicaciones.index') }}" @class(['active' => request()->routeIs('ubicaciones.*')])>Mis ubicaciones</a>
