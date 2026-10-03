@@ -28,6 +28,10 @@ use App\Http\Controllers\ServiceTypeController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/panel');
+Route::get('/estado-conexion', fn () => response()->noContent(204, [
+    'Cache-Control' => 'no-store, no-cache, must-revalidate',
+    'Pragma' => 'no-cache',
+]))->name('connectivity.check');
 Route::get('/marca/logo', [BrandingController::class, 'logo'])->name('branding.logo');
 
 Route::middleware('guest')->group(function (): void {

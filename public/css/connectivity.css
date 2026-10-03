@@ -1,0 +1,12 @@
+.connectivity-status{position:fixed;z-index:1200;left:clamp(14px,2.5vw,28px);bottom:clamp(14px,2.5vw,28px);display:flex;align-items:center;gap:11px;max-width:min(440px,calc(100vw - 28px));padding:11px 13px;border:1px solid #cfe4d8;border-radius:13px;background:#f6fcf8;box-shadow:0 12px 38px rgba(32,30,34,.15);color:#235b43;font-size:.78rem;line-height:1.35}
+.connectivity-status[hidden],.connectivity-status button[hidden]{display:none}
+.connectivity-indicator{flex:none;width:10px;height:10px;border-radius:50%;background:#2d9966;box-shadow:0 0 0 4px rgba(45,153,102,.13)}
+.connectivity-copy{display:grid;min-width:0;gap:2px}.connectivity-copy strong{font-size:.81rem;font-weight:800}.connectivity-copy small{color:#587361;font-size:.72rem;line-height:1.4}
+.connectivity-copy small:empty{display:none}
+.connectivity-status button{flex:none;min-height:34px;padding:6px 10px;border:1px solid currentColor;border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:800;cursor:pointer}
+.connectivity-status button:hover,.connectivity-status button:focus-visible{background:rgba(0,0,0,.045);outline-offset:2px}
+.connectivity-status[data-state="offline"],.connectivity-status[data-state="server"]{border-color:#efc0c9;background:#fff8f9;color:#8c2540}
+.connectivity-status[data-state="offline"] .connectivity-indicator,.connectivity-status[data-state="server"] .connectivity-indicator{background:#c53a5c;box-shadow:0 0 0 4px rgba(197,58,92,.12)}
+.connectivity-status[data-state="offline"] .connectivity-copy small,.connectivity-status[data-state="server"] .connectivity-copy small{color:#8a5261}
+.connectivity-status[data-state="recovered"]{border-color:#a8d9bd;background:#edf9f1}
+@media(max-width:600px){.connectivity-status{left:14px;right:14px;bottom:14px;max-width:none;padding:12px}.connectivity-status[data-state="online"]{left:14px;right:auto;padding:8px 11px}.connectivity-status[data-state="online"] .connectivity-copy strong{font-size:.73rem}}

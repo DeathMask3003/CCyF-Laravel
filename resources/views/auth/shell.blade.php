@@ -10,6 +10,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}?v=20260929">
     <link rel="stylesheet" href="{{ asset('css/auth.css') }}?v=20260923-1">
     <link rel="stylesheet" href="{{ asset('css/branding.css') }}?v=20260923-1">
+    <link rel="stylesheet" href="{{ asset('css/connectivity.css') }}?v=1">
 </head>
 <body>
 @php($brandingService = app(\App\Services\Branding::class))
@@ -47,6 +48,8 @@
         <p class="auth-footer">© {{ date('Y') }} CCyF · COBAEM</p>
     </section>
 </main>
+<x-connectivity-status />
+<script src="{{ asset('js/connectivity.js') }}?v=1" defer></script>
 <script>
 document.querySelectorAll('[data-password-toggle]').forEach(button => {
     button.addEventListener('click', () => {

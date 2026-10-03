@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="{{ asset('css/ccyf.css') }}?v=20260922-1">
     <link rel="stylesheet" href="{{ asset('css/branding.css') }}?v=20261002-1">
     <link rel="stylesheet" href="{{ asset('css/header.css') }}?v=20260923-2">
+    <link rel="stylesheet" href="{{ asset('css/connectivity.css') }}?v=1">
     @stack('head')
 </head>
 <body>
@@ -97,11 +98,13 @@
             @endauth
         </div>
     </header>
+    <x-connectivity-status />
     <main class="page-container @guest guest-container @endguest">
         @if (session('status')) <div class="flash" role="status">{{ session('status') }}</div> @endif
         @yield('content')
     </main>
     @stack('scripts')
+    <script src="{{ asset('js/connectivity.js') }}?v=1" defer></script>
     @auth
     <script>
     (() => {
