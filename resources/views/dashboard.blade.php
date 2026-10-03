@@ -7,11 +7,46 @@
     <div><span class="eyebrow">Panel de trabajo</span><h1>Bienvenido, {{ auth()->user()->usu_area }}</h1><p>Gestiona las convocatorias y propuestas de CCyF desde este espacio.</p></div>
 </div>
 @php($ccyfMenu = app(\App\Services\LegacyMenu::class))
-@if ($ccyfMenu->isContestant(auth()->user()))
+@if ($ccyfMenu->isContestant(auth()->user()) || $ccyfMenu->allows(auth()->user(), 'Usuarios'))
     @php($portalBrandingService = app(\App\Services\Branding::class))
-    @php($portalDocument = $portalBrandingService->current())
-    @if ($portalBrandingService->documentFile($portalDocument))
-        <section class="portal-document-card" aria-labelledby="portal-document-title"><div class="portal-document-icon" aria-hidden="true">PDF</div><div class="portal-document-copy"><span class="eyebrow">Información para participantes</span><h2 id="portal-document-title">{{ $portalDocument->document_title }}</h2><p>{{ $portalDocument->document_description }}</p></div><a class="button button-link portal-document-open" href="{{ route('branding.document') }}" data-review-document data-document-name="{{ $portalDocument->document_title }}" data-document-mime="application/pdf">Consultar documento <span aria-hidden="true">↗</span></a></section>
+    @php($portalContent = $portalBrandingService->current())
+    @php($showPortalDocument = $portalBrandingService->documentFile($portalContent) !== null)
+    @php($showAnnouncement = $portalContent->announcement_visible)
+    @if ($showPortalDocument || $showAnnouncement)
+    <div class="portal-featured @if($showAnnouncement) has-announcement @endif">
+        @if ($showAnnouncement)
+            <article class="portal-announcement-card" aria-labelledby="portal-announcement-title">
+                <div class="portal-announcement-media">
+                    @if ($portalBrandingService->announcementVideoFile($portalContent))
+                        <video controls playsinline preload="none" @if($portalBrandingService->announcementImageFile($portalContent)) poster="{{ route('branding.announcement.media', ['kind' => 'imagen']) }}" @endif aria-label="Video de la convocatoria"><source src="{{ route('branding.announcement.media', ['kind' => 'video']) }}" type="{{ str_ends_with($portalContent->announcement_video_path, '.webm') ? 'video/webm' : 'video/mp4' }}">Tu navegador no puede reproducir este video.</video>
+                    @elseif ($portalBrandingService->announcementImageFile($portalContent))
+                        <img src="{{ route('branding.announcement.media', ['kind' => 'imagen']) }}" alt="Imagen de la convocatoria" loading="lazy">
+                    @else
+                        <div class="portal-announcement-placeholder" aria-hidden="true"><span>CCyF</span><strong>Convocatorias</strong></div>
+                    @endif
+                </div>
+                <div class="portal-announcement-body">
+                    <span class="eyebrow">Convocatoria · COBAEM</span>
+                    <h2 id="portal-announcement-title">{{ $portalContent->announcement_title }}</h2>
+                    @if($portalContent->announcement_description)<p>{{ $portalContent->announcement_description }}</p>@endif
+                    @if($portalContent->announcement_link_1_url || $portalContent->announcement_link_2_url)
+                        <div class="portal-announcement-actions">
+                            @foreach([1, 2] as $number)
+                                @if($portalContent->{'announcement_link_'.$number.'_url'})
+                                    <a href="{{ $portalContent->{'announcement_link_'.$number.'_url'} }}" @if($portalContent->{'announcement_link_'.$number.'_blank'}) target="_blank" rel="noopener noreferrer" @endif>{{ $portalContent->{'announcement_link_'.$number.'_label'} ?: ($number === 1 ? 'Consultar convocatoria' : 'Más información') }} <span aria-hidden="true">{{ $portalContent->{'announcement_link_'.$number.'_blank'} ? '↗' : '→' }}</span></a>
+                                @endif
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            </article>
+        @endif
+        @if ($showPortalDocument)
+            <section class="portal-document-card" aria-labelledby="portal-document-title"><div class="portal-document-icon" aria-hidden="true">PDF</div><div class="portal-document-copy"><span class="eyebrow">Información para participantes</span><h2 id="portal-document-title">{{ $portalContent->document_title }}</h2><p>{{ $portalContent->document_description }}</p></div><a class="button button-link portal-document-open" href="{{ route('branding.document') }}" data-review-document data-document-name="{{ $portalContent->document_title }}" data-document-mime="application/pdf">Consultar documento <span aria-hidden="true">↗</span></a></section>
+        @endif
+    </div>
+    @endif
+    @if ($showPortalDocument)
         @include('revision.document-viewer', ['viewerEyebrow' => 'Información para participantes'])
     @endif
 @endif

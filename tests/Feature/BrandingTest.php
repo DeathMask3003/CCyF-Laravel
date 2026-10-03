@@ -145,7 +145,7 @@ class BrandingTest extends TestCase
         $this->get('/marca/documento')->assertOk()
             ->assertHeader('Content-Type', 'application/pdf')
             ->assertHeader('X-Content-Type-Options', 'nosniff');
-        $this->get('/panel')->assertOk()->assertDontSee('portal-document-card');
+        $this->get('/panel')->assertOk()->assertSee('portal-document-card');
 
         $this->actingAs(LegacyUser::findOrFail(2));
         $this->get('/panel')->assertOk()->assertSee('portal-document-card')
@@ -181,5 +181,107 @@ class BrandingTest extends TestCase
             'document' => UploadedFile::fake()->createWithContent('falso.pdf', 'No es un PDF'),
         ])->assertSessionHasErrors('document');
         $this->assertDatabaseCount('ccyf_branding', 0);
+    }
+
+    public function test_admin_publishes_and_hides_announcement_for_contestants_and_admins(): void
+    {
+        Storage::fake('local');
+        $this->get('/marca/convocatoria/imagen')->assertRedirect('/acceso');
+        $this->actingAs(LegacyUser::findOrFail(2));
+        $this->get('/panel')->assertOk()->assertDontSee('portal-announcement-card');
+        $this->put('/administracion/identidad/convocatoria', [
+            'announcement_title' => 'Convocatoria abierta',
+        ])->assertForbidden();
+
+        $this->actingAs(LegacyUser::findOrFail(1));
+        $this->put('/administracion/identidad/convocatoria', [
+            'announcement_visible' => '1',
+            'announcement_title' => 'Convocatoria de Cafetería y Fotocopiado',
+            'announcement_description' => 'Consulta las bases y fechas de participación.',
+            'announcement_image' => UploadedFile::fake()->image('convocatoria.jpg', 1200, 900),
+            'announcement_link_1_label' => 'Consultar bases',
+            'announcement_link_1_url' => 'https://cobaemex.edu.mx/convocatoria',
+            'announcement_link_1_blank' => '1',
+            'announcement_link_2_url' => 'https://cobaemex.edu.mx/requisitos',
+        ])->assertRedirect()->assertSessionHas('status');
+
+        $row = DB::table('ccyf_branding')->where('id', 1)->first();
+        $this->assertSame(1, (int) $row->announcement_visible);
+        Storage::disk('local')->assertExists($row->announcement_image_path);
+        $this->get('/marca/convocatoria/imagen')->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+        $this->get('/panel')->assertOk()->assertSee('portal-announcement-card')
+            ->assertSee('Convocatoria de Cafetería y Fotocopiado')
+            ->assertSee('target="_blank" rel="noopener noreferrer"', false)
+            ->assertSee('https://cobaemex.edu.mx/requisitos');
+        $this->get('/administracion/identidad')->assertOk()->assertSee('Tarjeta de convocatoria');
+
+        $this->actingAs(LegacyUser::findOrFail(2));
+        $this->get('/panel')->assertOk()->assertSee('portal-announcement-card')
+            ->assertSee('Consultar bases')->assertSee('Más información');
+        $this->get('/marca/convocatoria/imagen')->assertOk();
+
+        $this->actingAs(LegacyUser::findOrFail(1));
+        $this->put('/administracion/identidad/convocatoria', [
+            'announcement_title' => 'Convocatoria de Cafetería y Fotocopiado',
+        ])->assertRedirect();
+        $this->assertSame(0, (int) DB::table('ccyf_branding')->where('id', 1)->value('announcement_visible'));
+        Storage::disk('local')->assertExists($row->announcement_image_path);
+        $this->get('/panel')->assertOk()->assertDontSee('portal-announcement-card');
+        $this->get('/marca/convocatoria/imagen')->assertOk();
+        $this->actingAs(LegacyUser::findOrFail(2));
+        $this->get('/panel')->assertOk()->assertDontSee('portal-announcement-card');
+        $this->get('/marca/convocatoria/imagen')->assertNotFound();
+    }
+
+    public function test_announcement_rejects_invalid_links_and_files_without_replacing_existing_media(): void
+    {
+        Storage::fake('local');
+        $this->actingAs(LegacyUser::findOrFail(1));
+        $this->put('/administracion/identidad/convocatoria', [
+            'announcement_title' => 'Convocatoria de prueba',
+            'announcement_link_1_url' => 'javascript:alert(1)',
+        ])->assertSessionHasErrors('announcement_link_1_url');
+        $this->put('/administracion/identidad/convocatoria', [
+            'announcement_title' => 'Convocatoria de prueba',
+            'announcement_image' => UploadedFile::fake()->create('archivo.svg', 5, 'image/svg+xml'),
+        ])->assertSessionHasErrors('announcement_image');
+        $this->assertDatabaseCount('ccyf_branding', 0);
+    }
+
+    public function test_announcement_image_and_video_can_be_replaced_and_removed(): void
+    {
+        Storage::fake('local');
+        $this->actingAs(LegacyUser::findOrFail(1));
+        $video = UploadedFile::fake()->createWithContent('convocatoria.mp4',
+            "\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2mp41");
+        $this->put('/administracion/identidad/convocatoria', [
+            'announcement_title' => 'Convocatoria con video',
+            'announcement_visible' => '1',
+            'announcement_image' => UploadedFile::fake()->image('portada.png', 800, 600),
+            'announcement_video' => $video,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $first = DB::table('ccyf_branding')->where('id', 1)->first();
+        Storage::disk('local')->assertExists($first->announcement_image_path);
+        Storage::disk('local')->assertExists($first->announcement_video_path);
+        $this->get('/marca/convocatoria/video')->assertOk()->assertHeader('Content-Type', 'video/mp4');
+        $this->get('/panel')->assertOk()->assertSee('<video controls playsinline', false)
+            ->assertSee('poster="http://localhost:8082/marca/convocatoria/imagen"', false);
+
+        $this->put('/administracion/identidad/convocatoria', [
+            'announcement_title' => 'Convocatoria con video',
+            'announcement_visible' => '1',
+            'announcement_image' => UploadedFile::fake()->image('nueva.jpg', 1000, 700),
+            'remove_announcement_video' => '1',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        Storage::disk('local')->assertMissing($first->announcement_image_path);
+        Storage::disk('local')->assertMissing($first->announcement_video_path);
+        $this->get('/marca/convocatoria/video')->assertNotFound();
+
+        $this->put('/administracion/identidad/convocatoria', [
+            'announcement_title' => 'Convocatoria con video',
+            'remove_announcement_image' => '1',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertNull(DB::table('ccyf_branding')->where('id', 1)->value('announcement_image_path'));
     }
 }

@@ -56,6 +56,10 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::put('/administracion/identidad/documento', [BrandingController::class, 'updateDocument'])
         ->middleware('throttle:10,1')->name('branding.document.update');
     Route::get('/marca/documento', [BrandingController::class, 'document'])->name('branding.document');
+    Route::put('/administracion/identidad/convocatoria', [BrandingController::class, 'updateAnnouncement'])
+        ->middleware('throttle:10,1')->name('branding.announcement.update');
+    Route::get('/marca/convocatoria/{kind}', [BrandingController::class, 'announcementMedia'])
+        ->whereIn('kind', ['imagen', 'video'])->name('branding.announcement.media');
     Route::get('/panel', fn () => view('dashboard'))->name('dashboard');
     Route::post('/salir', [AccessController::class, 'destroy'])->name('logout');
     Route::get('/mi-perfil', [ProfileController::class, 'show'])->name('perfil.show');
