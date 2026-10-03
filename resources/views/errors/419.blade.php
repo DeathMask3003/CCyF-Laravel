@@ -1,0 +1,8 @@
+@extends('errors.layout')
+@section('title', 'Sesión expirada')
+@section('code', '419')
+@section('heading', 'Tu sesión necesita renovarse')
+@section('description', 'Por seguridad, esta solicitud ya no pudo completarse. Abre de nuevo el portal antes de intentarlo.')
+@section('tip', 'Si estabas enviando un registro, comprueba si se guardó antes de repetir el envío.')
+@section('action_label', 'Abrir acceso')
+@section('action_url', url('/acceso'))

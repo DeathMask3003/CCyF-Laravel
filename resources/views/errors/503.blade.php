@@ -1,0 +1,6 @@
+@extends('errors.layout')
+@section('title', 'Servicio temporalmente no disponible')
+@section('code', '503')
+@section('heading', 'Volveremos en un momento')
+@section('description', 'CCyF está temporalmente fuera de servicio. Estamos trabajando para restablecer el acceso.')
+@section('tip', 'Conserva tus archivos y vuelve a intentarlo en unos minutos.')

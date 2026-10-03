@@ -1,0 +1,6 @@
+@extends('errors.layout')
+@section('title', 'Conexión no compatible')
+@section('code', '505')
+@section('heading', 'Esta conexión no es compatible')
+@section('description', 'El servidor no admite la versión de comunicación usada para abrir esta página.')
+@section('tip', 'Abre CCyF con una versión reciente de tu navegador y utiliza la dirección segura del portal.')

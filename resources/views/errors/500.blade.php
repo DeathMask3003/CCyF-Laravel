@@ -1,0 +1,6 @@
+@extends('errors.layout')
+@section('title', 'No se pudo completar la solicitud')
+@section('code', '500')
+@section('heading', 'Tuvimos un problema al procesar tu solicitud')
+@section('description', 'El portal no pudo completar esta operación. Puedes volver al inicio e intentarlo más tarde.')
+@section('tip', 'Si estabas guardando un registro, verifica primero si ya aparece en tu listado para evitar duplicarlo.')

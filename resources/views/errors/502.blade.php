@@ -1,0 +1,6 @@
+@extends('errors.layout')
+@section('title', 'Servicio temporalmente no disponible')
+@section('code', '502')
+@section('heading', 'No pudimos comunicarnos con el servicio')
+@section('description', 'La comunicación con el portal se interrumpió temporalmente. Inténtalo de nuevo en unos minutos.')
+@section('tip', 'Si acababas de enviar un formulario, comprueba su resultado antes de repetirlo.')

@@ -1,0 +1,6 @@
+@extends('errors.layout')
+@section('title', 'Tiempo de espera agotado')
+@section('code', '504')
+@section('heading', 'La respuesta está tardando demasiado')
+@section('description', 'El portal no recibió una respuesta a tiempo. Espera un momento y vuelve a intentarlo.')
+@section('tip', 'Si estabas enviando documentos, revisa primero si el registro se completó.')

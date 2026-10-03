@@ -1,0 +1,6 @@
+@extends('errors.layout')
+@section('title', 'Demasiadas solicitudes')
+@section('code', '429')
+@section('heading', 'Espera un momento para continuar')
+@section('description', 'Recibimos varias solicitudes en poco tiempo. Vuelve a intentarlo después de unos minutos.')
+@section('tip', 'No es necesario abrir varias veces la misma página ni repetir el envío de un formulario.')

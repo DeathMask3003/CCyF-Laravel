@@ -1,0 +1,6 @@
+@extends('errors.layout')
+@section('title', 'Acceso restringido')
+@section('code', '403')
+@section('heading', 'No tienes acceso a esta sección')
+@section('description', 'Tu cuenta no cuenta con permiso para consultar este contenido.')
+@section('tip', 'Si necesitas acceso por tus funciones, solicítalo a un administrador de CCyF.')
