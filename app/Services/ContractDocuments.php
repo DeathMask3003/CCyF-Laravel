@@ -130,7 +130,7 @@ class ContractDocuments
         $size = min(14, max(7, (float) $template->font_size));
         $html = '<!doctype html><html lang="es"><head><meta charset="UTF-8"><style>
             body { font-family: '.$family.'; color:#202020; font-size:'.$size.'pt; line-height:1.4; }
-            p { margin:0 0 7px; text-align:justify; } h1,h2,h3 { margin:0 0 9px; text-align:center; }
+            p { margin:0 0 7px; } h1,h2,h3 { margin:0 0 9px; text-align:center; }
             table { width:100%; border-collapse:collapse; } td,th { vertical-align:top; padding:3px; }
             table[border="1"] td,table[border="1"] th { border:1px solid #bcaab3; padding:5px; }
             .contract-image-table,.contract-image-table td { border:0; padding:0; text-align:center; }
@@ -324,17 +324,55 @@ class ContractDocuments
 
         foreach ($root->getElementsByTagName('*') as $node) {
             if (! $node instanceof DOMElement) continue;
-            if (! in_array(strtolower($node->tagName), ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'li', 'td', 'th'], true)) continue;
-            preg_match('/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i',
-                $node->getAttribute('style'), $match);
-            $alignment = strtolower($match[1] ?? $node->getAttribute('align'));
-            if (in_array($alignment, ['left', 'center', 'right', 'justify'], true)) {
+            $tag = strtolower($node->tagName);
+            if (! in_array($tag, ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'li', 'td', 'th'], true)) continue;
+
+            $alignment = $this->nodeAlignment($node);
+            $cell = $tag === 'td' || $tag === 'th' ? $node : $this->parentCell($node);
+            if ($cell === $node && $alignment === null) {
+                $childAlignments = [];
+                foreach ($node->childNodes as $child) {
+                    if ($child instanceof DOMElement && in_array(strtolower($child->tagName), ['p', 'div'], true)) {
+                        $childAlignments[] = $this->nodeAlignment($child);
+                    }
+                }
+                if ($childAlignments && count(array_unique($childAlignments)) === 1) {
+                    $alignment = $childAlignments[0];
+                }
+            }
+            if ($cell instanceof DOMElement && $alignment === null) {
+                for ($ancestor = $cell === $node ? $cell->parentNode : $cell;
+                    $ancestor instanceof DOMElement; $ancestor = $ancestor->parentNode) {
+                    $alignment = $this->nodeAlignment($ancestor);
+                    if ($alignment !== null) break;
+                }
+            }
+            if ($tag === 'p' && $alignment === null && $cell === null) $alignment = 'justify';
+            if ($alignment !== null) {
+                $node->setAttribute('style', 'text-align:'.$alignment);
                 $node->setAttribute('align', $alignment);
             }
         }
         $result = '';
         foreach ($root->childNodes as $node) $result .= $document->saveHTML($node);
         return $result;
+    }
+
+    private function nodeAlignment(?DOMNode $node): ?string
+    {
+        if (! $node instanceof DOMElement) return null;
+        preg_match('/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i',
+            $node->getAttribute('style'), $match);
+        $alignment = strtolower($match[1] ?? $node->getAttribute('align'));
+        return in_array($alignment, ['left', 'center', 'right', 'justify'], true) ? $alignment : null;
+    }
+
+    private function parentCell(DOMElement $node): ?DOMElement
+    {
+        for ($parent = $node->parentNode; $parent instanceof DOMElement; $parent = $parent->parentNode) {
+            if (in_array(strtolower($parent->tagName), ['td', 'th'], true)) return $parent;
+        }
+        return null;
     }
 
     private function clean(string $html): string
@@ -386,11 +424,12 @@ class ContractDocuments
                     continue;
                 }
                 $alignment = null;
-                $alignable = in_array($tag, ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'li', 'td', 'th', 'blockquote'], true);
+                $alignable = in_array($tag, ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'li', 'table', 'tr', 'td', 'th', 'blockquote'], true);
                 $style = $child->getAttribute('style');
                 if ($alignable && preg_match('/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i',
                     $style, $match)) $alignment = strtolower($match[1]);
-                elseif ($alignable && in_array(strtolower($child->getAttribute('align')),
+                elseif ($alignable && ! in_array($tag, ['table', 'tr'], true)
+                    && in_array(strtolower($child->getAttribute('align')),
                     ['left', 'center', 'right', 'justify'], true)) $alignment = strtolower($child->getAttribute('align'));
                 $inlineStyles = [];
                 if ($tag === 'span') {
