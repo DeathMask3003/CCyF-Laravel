@@ -7,11 +7,13 @@ use App\Services\ContractDocuments;
 use App\Services\ContractText;
 use App\Services\LegacyMenu;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -165,6 +167,38 @@ class AcceptedProposalController extends Controller
             'fontFamilies' => ContractDocuments::FONT_FAMILIES,
             'additionalSigners' => $additionalSigners,
             'editorHtml' => $contracts->editorHtml((string) old('body', $editor?->body ?? ''))]);
+    }
+
+    public function uploadImage(Request $request, LegacyMenu $menu): JsonResponse
+    {
+        $this->authorizeModule($request, $menu);
+        $data = $request->validate([
+            'image' => ['required', 'file', 'image', 'mimetypes:image/png,image/jpeg', 'max:2048',
+                'dimensions:max_width=2400,max_height=2400'],
+        ]);
+        $file = $data['image'];
+        $extension = $file->getMimeType() === 'image/png' ? 'png' : 'jpg';
+        $name = Str::uuid().'.'.$extension;
+        $path = $file->storeAs('ccyf/contratos/imagenes', $name, 'local');
+        abort_unless($path, 500, 'No fue posible guardar la imagen.');
+        [$width, $height] = getimagesize($file->getRealPath());
+
+        return response()->json([
+            'url' => route('contratos.image', ['image' => $name], false),
+            'width' => $width === $height ? 180 : min(480, max(180, (int) round($width / 2))),
+        ], 201);
+    }
+
+    public function image(string $image, Request $request, LegacyMenu $menu, ContractDocuments $contracts): Response
+    {
+        $this->authorizeModule($request, $menu);
+        $path = $contracts->imagePath('/contratos-permisionarios/imagenes/'.$image);
+        abort_unless($path && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, null, [
+            'Content-Type' => str_ends_with($path, '.png') ? 'image/png' : 'image/jpeg',
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
     }
 
     public function saveTemplate(string $service, Request $request, LegacyMenu $menu, ContractDocuments $contracts): RedirectResponse

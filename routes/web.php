@@ -80,6 +80,10 @@ Route::middleware(['auth', 'ccyf.active'])->group(function (): void {
     Route::get('/contratos-permisionarios', [AcceptedProposalController::class, 'index'])->name('contratos.index');
     Route::post('/contratos-permisionarios/enviar-seleccionados', [AcceptedProposalController::class, 'sendBulk'])
         ->middleware('throttle:3,1')->name('contratos.send-bulk');
+    Route::post('/contratos-permisionarios/imagenes', [AcceptedProposalController::class, 'uploadImage'])
+        ->middleware('throttle:20,1')->name('contratos.images.upload');
+    Route::get('/contratos-permisionarios/imagenes/{image}', [AcceptedProposalController::class, 'image'])
+        ->where('image', '[0-9a-f-]{36}\\.(?:png|jpg)')->name('contratos.image');
     Route::get('/contratos-permisionarios/plantilla/{service}', [AcceptedProposalController::class, 'template'])
         ->name('contratos.template');
     Route::post('/contratos-permisionarios/plantilla/{service}', [AcceptedProposalController::class, 'saveTemplate'])

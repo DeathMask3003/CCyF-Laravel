@@ -6,11 +6,14 @@ use DOMDocument;
 use DOMElement;
 use DOMNode;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Mpdf\Mpdf;
 use NumberFormatter;
 
 class ContractDocuments
 {
+    private const IMAGE_URL_PATTERN = '~^/contratos-permisionarios/imagenes/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(png|jpg)$~';
+
     public const FONT_FAMILIES = [
         'dejavusans' => 'DejaVu Sans',
         'dejavuserif' => 'DejaVu Serif',
@@ -99,6 +102,13 @@ class ContractDocuments
         return $this->clean($body);
     }
 
+    public function imagePath(string $url): ?string
+    {
+        if (! preg_match(self::IMAGE_URL_PATTERN, $url, $matches)) return null;
+
+        return 'ccyf/contratos/imagenes/'.$matches[1].'.'.$matches[2];
+    }
+
     public function render(object $row, bool $draft = true): string
     {
         $template = $this->template($row->service_id);
@@ -112,6 +122,8 @@ class ContractDocuments
         $replacements['{tabla_precios}'] = $this->priceTableHtml($row);
         $html = strtr($html, $replacements);
         $html = preg_replace('/(?:&nbsp;|\x{00A0})+/u', ' ', $html) ?? $html;
+        $html = $this->embedImagesForPdf($html);
+        $html = $this->alignTextForPdf($html);
         abort_unless(array_key_exists($template->font_family, self::FONT_FAMILIES), 422,
             'La fuente de esta plantilla no está disponible en el servidor.');
         $family = $template->font_family;
@@ -120,6 +132,8 @@ class ContractDocuments
             body { font-family: '.$family.'; color:#202020; font-size:'.$size.'pt; line-height:1.4; }
             p { margin:0 0 7px; text-align:justify; } h1,h2,h3 { margin:0 0 9px; text-align:center; }
             table { width:100%; border-collapse:collapse; } td,th { vertical-align:top; padding:3px; }
+            table[border="1"] td,table[border="1"] th { border:1px solid #bcaab3; padding:5px; }
+            .contract-image-table,.contract-image-table td { border:0; padding:0; text-align:center; }
             .prices td,.prices th { border:1px solid #bbb; padding:6px; } .prices th { background:#f1ecee; }
             img { max-width:170mm; height:auto; } .draft { color:#8d2d49; font-weight:bold;
                 border:1px solid #d9b3bf; padding:7px 12px; margin-bottom:15px; text-align:center; }
@@ -253,6 +267,76 @@ class ContractDocuments
         return $html.'</tbody></table>';
     }
 
+    private function embedImagesForPdf(string $html): string
+    {
+        if (! str_contains($html, '<img')) return $html;
+
+        $document = new DOMDocument('1.0', 'UTF-8');
+        $previous = libxml_use_internal_errors(true);
+        $document->loadHTML('<?xml encoding="UTF-8"?><div id="contract-pdf-content">'.$html.'</div>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        $root = $document->getElementById('contract-pdf-content');
+        if (! $root) return $html;
+
+        foreach (iterator_to_array($root->getElementsByTagName('img')) as $image) {
+            $path = $this->imagePath($image->getAttribute('src'));
+            if (! $path) continue; // Historical templates may contain embedded images.
+            if (! Storage::disk('local')->exists($path)) {
+                $image->parentNode?->removeChild($image);
+                continue;
+            }
+            $parent = $image->parentNode;
+            if ($parent instanceof DOMElement && strtolower($parent->tagName) === 'p'
+                && trim($parent->textContent) === '' && $parent->getElementsByTagName('img')->length === 1) {
+                preg_match('/text-align\s*:\s*(left|center|right)/i', $parent->getAttribute('style'), $alignment);
+                $choice = strtolower($alignment[1] ?? $parent->getAttribute('align'));
+                if (! in_array($choice, ['left', 'center', 'right'], true)) $choice = 'center';
+                $table = $document->createElement('table');
+                $table->setAttribute('class', 'contract-image-table');
+                $row = $document->createElement('tr');
+                $cell = $document->createElement('td');
+                $cell->setAttribute('align', $choice);
+                $parent->parentNode?->replaceChild($table, $parent);
+                $table->appendChild($row);
+                $row->appendChild($cell);
+                $cell->appendChild($image);
+            }
+            $mime = str_ends_with($path, '.png') ? 'image/png' : 'image/jpeg';
+            $image->setAttribute('src', 'data:'.$mime.';base64,'.base64_encode(Storage::disk('local')->get($path)));
+        }
+        $result = '';
+        foreach ($root->childNodes as $node) $result .= $document->saveHTML($node);
+        return $result;
+    }
+
+    private function alignTextForPdf(string $html): string
+    {
+        $document = new DOMDocument('1.0', 'UTF-8');
+        $previous = libxml_use_internal_errors(true);
+        $document->loadHTML('<?xml encoding="UTF-8"?><div id="contract-pdf-alignment">'.$html.'</div>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        $root = $document->getElementById('contract-pdf-alignment');
+        if (! $root) return $html;
+
+        foreach ($root->getElementsByTagName('*') as $node) {
+            if (! $node instanceof DOMElement) continue;
+            if (! in_array(strtolower($node->tagName), ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'li', 'td', 'th'], true)) continue;
+            preg_match('/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i',
+                $node->getAttribute('style'), $match);
+            $alignment = strtolower($match[1] ?? $node->getAttribute('align'));
+            if (in_array($alignment, ['left', 'center', 'right', 'justify'], true)) {
+                $node->setAttribute('align', $alignment);
+            }
+        }
+        $result = '';
+        foreach ($root->childNodes as $node) $result .= $document->saveHTML($node);
+        return $result;
+    }
+
     private function clean(string $html): string
     {
         $document = new DOMDocument();
@@ -271,36 +355,67 @@ class ContractDocuments
     private function cleanNode(DOMNode $node): void
     {
         $allowed = ['p','br','b','strong','i','em','u','s','span','div','h1','h2','h3','h4',
-            'ul','ol','li','table','thead','tbody','tr','td','th','img','hr','sup','sub'];
+            'ul','ol','li','table','thead','tbody','tr','td','th','img','hr','sup','sub','a','blockquote'];
         foreach (iterator_to_array($node->childNodes) as $child) {
             if ($child instanceof DOMElement) {
-                if (! in_array(strtolower($child->tagName), $allowed, true)) {
+                $tag = strtolower($child->tagName);
+                if (! in_array($tag, $allowed, true)) {
                     $this->cleanNode($child);
                     while ($child->firstChild) $node->insertBefore($child->firstChild, $child);
                     $node->removeChild($child);
                     continue;
                 }
+                if ($tag === 'img') {
+                    $src = trim($child->getAttribute('src'));
+                    $path = $this->imagePath($src);
+                    $embedded = preg_match('#^data:image/(png|jpeg|gif);base64,[A-Za-z0-9+/=]+$#', $src);
+                    if ((! $path || ! Storage::disk('local')->exists($path)) && ! $embedded) {
+                        $node->removeChild($child);
+                        continue;
+                    }
+                    $width = (int) $child->getAttribute('width');
+                    if ($width <= 0 && preg_match('/(?:^|;)\s*width\s*:\s*(\d+)px\s*(?:;|$)/i',
+                        $child->getAttribute('style'), $match)) {
+                        $width = (int) $match[1];
+                    }
+                    $alt = mb_substr(trim($child->getAttribute('alt')), 0, 120);
+                    foreach (iterator_to_array($child->attributes) as $attribute) $child->removeAttribute($attribute->name);
+                    $child->setAttribute('src', $src);
+                    $child->setAttribute('alt', $alt);
+                    if ($width > 0) $child->setAttribute('width', (string) min(480, max(60, $width)));
+                    continue;
+                }
                 $alignment = null;
-                $alignable = in_array(strtolower($child->tagName),
-                    ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'li', 'td', 'th'], true);
+                $alignable = in_array($tag, ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'li', 'td', 'th', 'blockquote'], true);
+                $style = $child->getAttribute('style');
+                if ($alignable && preg_match('/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i',
+                    $style, $match)) $alignment = strtolower($match[1]);
+                elseif ($alignable && in_array(strtolower($child->getAttribute('align')),
+                    ['left', 'center', 'right', 'justify'], true)) $alignment = strtolower($child->getAttribute('align'));
+                $inlineStyles = [];
+                if ($tag === 'span') {
+                    if (preg_match('/(?:^|;)\s*font-family\s*:\s*(dejavusans|dejavuserif|freesans)\s*(?:;|$)/i', $style, $match)) {
+                        $inlineStyles[] = 'font-family:'.strtolower($match[1]);
+                    }
+                    if (preg_match('/(?:^|;)\s*font-size\s*:\s*(\d+(?:\.5)?)pt\s*(?:;|$)/i', $style, $match)) {
+                        $size = (float) $match[1];
+                        if ($size >= 7 && $size <= 14) $inlineStyles[] = 'font-size:'.$match[1].'pt';
+                    }
+                }
+                $href = $tag === 'a' ? trim($child->getAttribute('href')) : '';
+                $border = $tag === 'table' && $child->getAttribute('border') === '1';
                 foreach (iterator_to_array($child->attributes) as $attribute) {
                     $name = strtolower($attribute->name);
                     $value = $attribute->value;
-                    if ($alignable && $name === 'style'
-                        && preg_match('/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i', $value, $match)) {
-                        $alignment = strtolower($match[1]);
-                    }
-                    if ($alignable && $name === 'align'
-                        && in_array(strtolower($value), ['left', 'center', 'right', 'justify'], true)
-                        && $alignment === null) {
-                        $alignment = strtolower($value);
-                    }
-                    $safeSpan = in_array($name, ['colspan', 'rowspan'], true) && ctype_digit($value) && (int) $value <= 12;
-                    $safeImage = $name === 'src' && $child->tagName === 'img'
-                        && preg_match('#^data:image/(png|jpeg|gif);base64,[A-Za-z0-9+/=]+$#', $value);
-                    if (! $safeSpan && ! $safeImage) $child->removeAttributeNode($attribute);
+                    $safeSpan = in_array($tag, ['td', 'th'], true)
+                        && in_array($name, ['colspan', 'rowspan'], true)
+                        && ctype_digit($value) && (int) $value >= 1 && (int) $value <= 12;
+                    if (! $safeSpan) $child->removeAttributeNode($attribute);
                 }
                 if ($alignment !== null) $child->setAttribute('style', 'text-align:'.$alignment);
+                if ($inlineStyles !== []) $child->setAttribute('style', implode(';', $inlineStyles));
+                if ($border) $child->setAttribute('border', '1');
+                if ($tag === 'a' && preg_match('~^https?://~i', $href)) $child->setAttribute('href', $href);
                 $this->cleanNode($child);
             } elseif (! in_array($child->nodeType, [XML_TEXT_NODE], true)) {
                 $node->removeChild($child);

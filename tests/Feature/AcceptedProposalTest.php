@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class AcceptedProposalTest extends TestCase
@@ -212,7 +213,8 @@ class AcceptedProposalTest extends TestCase
     {
         $this->be(LegacyUser::findOrFail(2));
         $this->get('/contratos-permisionarios/plantilla/cafeteria')->assertOk()
-            ->assertSee('Justificar texto')->assertSee('Centrar texto');
+            ->assertSee('vendor/tinymce/tinymce.min.js', false)
+            ->assertSee('contract-tinymce.js', false);
         $body = '<p style="text-align:center;color:red">{permisionario} prestará el servicio en {plantel} por {monto}.</p>'
             .'<p align="justify">La vigencia será de {fecha_ini} a {fecha_fin}. Las cláusulas siguientes se justifican en el documento.</p>';
         $this->post('/contratos-permisionarios/plantilla/cafeteria', $this->reviewedTemplate($body))
@@ -223,6 +225,44 @@ class AcceptedProposalTest extends TestCase
         $this->assertStringNotContainsString('color:red', $saved);
         $this->get('/contratos-permisionarios/historico-80/borrador')->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_contract_template_uses_tinymce_and_keeps_uploaded_images_tables_and_inline_type(): void
+    {
+        $this->be(LegacyUser::findOrFail(1));
+        $this->postJson('/contratos-permisionarios/imagenes', [
+            'image' => UploadedFile::fake()->image('firma.png', 240, 120),
+        ])->assertForbidden();
+
+        $this->be(LegacyUser::findOrFail(2));
+        $this->get('/contratos-permisionarios/plantilla/cafeteria')->assertOk()
+            ->assertSee('vendor/tinymce/tinymce.min.js', false)
+            ->assertSee('data-tiny-base=', false)
+            ->assertSee('contract-tinymce.js', false);
+        $this->postJson('/contratos-permisionarios/imagenes', [
+            'image' => UploadedFile::fake()->create('vector.svg', 5, 'image/svg+xml'),
+        ])->assertUnprocessable()->assertJsonValidationErrors('image');
+        $upload = $this->postJson('/contratos-permisionarios/imagenes', [
+            'image' => UploadedFile::fake()->image('firma.png', 240, 120),
+        ])->assertCreated()->assertJsonStructure(['url', 'width']);
+        $url = $upload->json('url');
+        $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/png');
+        $body = '<p style="text-align:center"><img src="'.$url.'" width="180" alt="Firma" onerror="evil()"></p>'
+            .'<p style="text-align:justify"><span style="font-family:dejavuserif;font-size:10pt">{permisionario}</span>'
+            .' prestará el servicio en {plantel} por {monto} de {fecha_ini} a {fecha_fin}.'
+            .' Las condiciones siguientes forman parte del contrato.</p>'
+            .'<table border="1"><tbody><tr><td>Concepto</td><td>Importe</td></tr></tbody></table>';
+        $this->post('/contratos-permisionarios/plantilla/cafeteria', $this->reviewedTemplate($body))
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $saved = DB::table('ccyf_contract_templates')->value('body');
+        $this->assertStringContainsString($url, $saved);
+        $this->assertStringContainsString('font-family:dejavuserif;font-size:10pt', $saved);
+        $this->assertStringContainsString('border="1"', $saved);
+        $this->assertStringContainsString('text-align:center', $saved);
+        $this->assertStringNotContainsString('onerror', $saved);
+        $pdf = $this->get('/contratos-permisionarios/historico-80/borrador')->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')->getContent();
+        $this->assertGreaterThanOrEqual(2, substr_count($pdf, '/Subtype /Image'));
     }
 
     public function test_historical_sent_flag_blocks_changes_even_without_a_date(): void
