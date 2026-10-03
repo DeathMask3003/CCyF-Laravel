@@ -1,14 +1,85 @@
 document.addEventListener('DOMContentLoaded', () => {
     const source = document.getElementById('contract-body');
     const form = document.getElementById('contract-template-form');
-    if (!source || !form || !window.tinymce) return;
+    if (!source || !form) return;
 
     const baseUrl = source.dataset.tinyBase.replace(/\/$/, '');
     const token = form.querySelector('input[name="_token"]')?.value;
     const font = document.getElementById('contract-font-family');
     const size = document.getElementById('contract-font-size');
+    const saveButton = form.querySelector('button[type="submit"]');
+    const status = document.getElementById('contract-save-status');
     let submitting = false;
-    let readyToSubmit = false;
+
+    const showStatus = (message, type = 'error') => {
+        if (!status) return;
+        status.textContent = message;
+        status.dataset.type = type;
+        status.hidden = false;
+    };
+
+    const resetButton = () => {
+        submitting = false;
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Guardar versión revisada';
+        }
+    };
+
+    window.addEventListener('pageshow', resetButton);
+    if (document.querySelector('.form-errors')) {
+        showStatus('No se guardó la plantilla. Revisa los errores indicados al inicio de la página.');
+    }
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (submitting) return;
+
+        const invalid = [...form.elements].find((field) => field.willValidate && !field.checkValidity());
+        if (invalid) {
+            const label = invalid.name === 'confirmacion'
+                ? 'la confirmación de revisión'
+                : (invalid.labels?.[0]?.textContent || invalid.name || 'el campo obligatorio').trim();
+            showStatus(`Completa ${label} antes de guardar.`);
+            invalid.focus();
+            invalid.scrollIntoView({behavior: 'smooth', block: 'center'});
+            return;
+        }
+
+        submitting = true;
+        if (saveButton) {
+            saveButton.disabled = true;
+            saveButton.textContent = 'Preparando plantilla…';
+        }
+        showStatus('Preparando el texto y las imágenes…', 'working');
+
+        try {
+            const editor = window.tinymce?.get('contract-body');
+            if (editor) {
+                const uploads = await editor.uploadImages();
+                if (uploads.some((result) => !result.status)
+                    || /<img\b[^>]*\bsrc=["'](?:blob:|data:)/i.test(editor.getContent())) {
+                    throw new Error('Una imagen sigue sin cargarse. Corrígela antes de guardar.');
+                }
+                editor.save();
+                if (!editor.getContent({format: 'text'}).trim() && !/<img\b/i.test(editor.getContent())) {
+                    editor.focus();
+                    throw new Error('Escribe el contenido del contrato antes de guardar.');
+                }
+            }
+            if (!source.value.trim()) {
+                source.focus();
+                throw new Error('Escribe el contenido del contrato antes de guardar.');
+            }
+            showStatus('Guardando la nueva versión…', 'working');
+            HTMLFormElement.prototype.submit.call(form);
+        } catch (error) {
+            showStatus(error.message || 'No se pudo preparar la plantilla. Inténtalo de nuevo.');
+            resetButton();
+        }
+    });
+
+    if (!window.tinymce) return;
 
     const uploadImage = async (file) => {
         if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 2 * 1024 * 1024) {
@@ -99,36 +170,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            form.addEventListener('submit', async (event) => {
-                editor.save();
-                if (readyToSubmit) return;
-                event.preventDefault();
-                if (submitting) return;
-                submitting = true;
-                try {
-                    const uploads = await editor.uploadImages();
-                    if (uploads.some((result) => !result.status)
-                        || /<img\b[^>]*\bsrc=["'](?:blob:|data:)/i.test(editor.getContent())) {
-                        throw new Error('Espera a que se carguen todas las imágenes antes de guardar.');
-                    }
-                    editor.save();
-                    if (!editor.getContent({format: 'text'}).trim()) {
-                        editor.notificationManager.open({text: 'Escribe el contenido del contrato.', type: 'error'});
-                        editor.focus();
-                        return;
-                    }
-                    readyToSubmit = true;
-                    if (event.submitter) form.requestSubmit(event.submitter);
-                    else form.requestSubmit();
-                } catch (error) {
-                    editor.notificationManager.open({
-                        text: error.message || 'No se pudo preparar el contrato.', type: 'error', timeout: 6000,
-                    });
-                } finally {
-                    submitting = false;
-                    readyToSubmit = false;
-                }
-            });
         },
     }).catch((error) => {
         console.error('No se pudo iniciar TinyMCE para contratos.', error);
