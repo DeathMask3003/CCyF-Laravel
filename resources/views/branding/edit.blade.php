@@ -60,5 +60,5 @@
 </section>
 @include('revision.document-viewer', ['viewerEyebrow' => 'Documento para participantes'])
 <script src="{{ asset('js/branding-preview.js') }}?v=20261002-1" defer></script>
-<script src="{{ asset('js/announcement-preview.js') }}?v=20261003-1" defer></script>
+<script src="{{ asset('js/announcement-preview.js') }}?v=20261003-2" defer></script>
 @endsection

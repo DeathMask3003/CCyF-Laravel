@@ -9,7 +9,7 @@
     <link rel="alternate icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=20260929">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}?v=20260929">
     <link rel="stylesheet" href="{{ asset('css/ccyf.css') }}?v=20260922-1">
-    <link rel="stylesheet" href="{{ asset('css/branding.css') }}?v=20261003-1">
+    <link rel="stylesheet" href="{{ asset('css/branding.css') }}?v=20261003-2">
     <link rel="stylesheet" href="{{ asset('css/header.css') }}?v=20261003-2">
     <link rel="stylesheet" href="{{ asset('css/connectivity.css') }}?v=1">
     @stack('head')

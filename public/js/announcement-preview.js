@@ -14,17 +14,17 @@
     const submit = form.querySelector('[data-announcement-submit]');
     const visible = document.getElementById('announcement-visible');
     let imageUrl = null;
-    let videoUrl = null;
     let imageSelection = 0;
 
-    const release = kind => {
-        if (kind === 'image' && imageUrl) URL.revokeObjectURL(imageUrl);
-        if (kind === 'video' && videoUrl) URL.revokeObjectURL(videoUrl);
-        if (kind === 'image') imageUrl = null;
-        else videoUrl = null;
+    const placeholder = () => {
+        const element = document.createElement('div');
+        element.className = 'portal-announcement-placeholder';
+        element.setAttribute('aria-hidden', 'true');
+        element.innerHTML = '<span>CCyF</span><strong>Convocatorias</strong>';
+        return element;
     };
     const currentImage = () => imageUrl || (removeImage?.checked ? '' : form.dataset.currentImage);
-    const currentVideo = () => videoUrl || (removeVideo?.checked ? '' : form.dataset.currentVideo);
+    const currentVideo = () => removeVideo?.checked ? '' : form.dataset.currentVideo;
     const message = (text, error = false) => {
         status.textContent = text;
         status.classList.toggle('is-error', error);
@@ -33,7 +33,22 @@
     const renderMedia = () => {
         const image = currentImage();
         const video = currentVideo();
-        if (video) {
+        if (videoInput.files?.length) {
+            const draft = document.createElement('div');
+            draft.className = 'portal-announcement-video-draft';
+            if (image) {
+                const picture = document.createElement('img');
+                picture.src = image;
+                picture.alt = 'Portada del video seleccionado';
+                draft.append(picture);
+            } else {
+                draft.append(placeholder());
+            }
+            const badge = document.createElement('span');
+            badge.textContent = 'Video listo para guardar';
+            draft.append(badge);
+            media.replaceChildren(draft);
+        } else if (video) {
             const player = document.createElement('video');
             player.controls = true;
             player.playsInline = true;
@@ -50,11 +65,7 @@
             picture.alt = 'Vista previa de la convocatoria';
             media.replaceChildren(picture);
         } else {
-            const placeholder = document.createElement('div');
-            placeholder.className = 'portal-announcement-placeholder';
-            placeholder.setAttribute('aria-hidden', 'true');
-            placeholder.innerHTML = '<span>CCyF</span><strong>Convocatorias</strong>';
-            media.replaceChildren(placeholder);
+            media.replaceChildren(placeholder());
         }
     };
     const renderLinks = () => {
@@ -70,9 +81,12 @@
             links.append(item);
         });
     };
-    const changed = () => message(visible.checked
-        ? 'Vista previa sin guardar. La tarjeta aparecerá en Inicio al guardar.'
-        : 'Vista previa sin guardar. La tarjeta seguirá oculta hasta que la actives y guardes.');
+    const changed = () => {
+        const visibility = visible.checked
+            ? 'La tarjeta aparecerá en Inicio al guardar.'
+            : 'La tarjeta seguirá oculta hasta que la actives y guardes.';
+        message(`Vista previa sin guardar. ${visibility}${videoInput.files?.length ? ' El video podrá reproducirse después de guardar.' : ''}`);
+    };
 
     title.addEventListener('input', () => {
         document.getElementById('announcement-title-preview').textContent = title.value || 'Título de la convocatoria';
@@ -92,7 +106,7 @@
 
     imageInput.addEventListener('change', () => {
         const version = ++imageSelection;
-        release('image');
+        imageUrl = null;
         const file = imageInput.files?.[0];
         if (!file) { renderMedia(); changed(); return; }
         if (removeImage) removeImage.checked = false;
@@ -102,33 +116,46 @@
             message('La imagen debe ser PNG, JPG o WebP y medir como máximo 6 MB.', true);
             return;
         }
-        const url = URL.createObjectURL(file);
-        imageUrl = url;
-        const check = new Image();
-        check.onload = () => {
+        const reader = new FileReader();
+        reader.onload = () => {
             if (version !== imageSelection) return;
-            if (check.naturalWidth < 300 || check.naturalHeight < 200
-                || check.naturalWidth > 5000 || check.naturalHeight > 5000) {
-                release('image');
+            if (typeof reader.result !== 'string' || !reader.result.startsWith('data:image/')) {
                 imageInput.value = '';
                 renderMedia();
-                message('La imagen debe medir entre 300 × 200 y 5000 × 5000 píxeles.', true);
+                message('No se pudo leer la imagen. Elige otra.', true);
                 return;
             }
-            renderMedia();
-            changed();
+            const check = new Image();
+            check.onload = () => {
+                if (version !== imageSelection) return;
+                if (check.naturalWidth < 300 || check.naturalHeight < 200
+                    || check.naturalWidth > 5000 || check.naturalHeight > 5000) {
+                    imageInput.value = '';
+                    renderMedia();
+                    message('La imagen debe medir entre 300 × 200 y 5000 × 5000 píxeles.', true);
+                    return;
+                }
+                imageUrl = reader.result;
+                renderMedia();
+                changed();
+            };
+            check.onerror = () => {
+                if (version !== imageSelection) return;
+                imageInput.value = '';
+                renderMedia();
+                message('No se pudo abrir esta imagen. Elige otra.', true);
+            };
+            check.src = reader.result;
         };
-        check.onerror = () => {
+        reader.onerror = () => {
             if (version !== imageSelection) return;
-            release('image');
             imageInput.value = '';
             renderMedia();
-            message('No se pudo abrir esta imagen. Elige otra.', true);
+            message('No se pudo leer la imagen. Elige otra.', true);
         };
-        check.src = url;
+        reader.readAsDataURL(file);
     });
     videoInput.addEventListener('change', () => {
-        release('video');
         const file = videoInput.files?.[0];
         if (!file) { renderMedia(); changed(); return; }
         if (removeVideo) removeVideo.checked = false;
@@ -138,20 +165,18 @@
             message('El video debe ser MP4 o WebM y medir como máximo 50 MB.', true);
             return;
         }
-        videoUrl = URL.createObjectURL(file);
         renderMedia();
         changed();
     });
     removeImage?.addEventListener('change', () => {
         ++imageSelection;
-        if (removeImage.checked) { imageInput.value = ''; release('image'); }
+        if (removeImage.checked) { imageInput.value = ''; imageUrl = null; }
         renderMedia();
         changed();
     });
     removeVideo?.addEventListener('change', () => {
-        if (removeVideo.checked) { videoInput.value = ''; release('video'); }
+        if (removeVideo.checked) videoInput.value = '';
         renderMedia();
         changed();
     });
-    window.addEventListener('pagehide', () => { release('image'); release('video'); });
 })();

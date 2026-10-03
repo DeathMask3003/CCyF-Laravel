@@ -27,6 +27,9 @@
 .portal-announcement-media{aspect-ratio:4/3;overflow:hidden;background:#f4e9df}
 .portal-announcement-media img,.portal-announcement-media video{display:block;width:100%;height:100%;object-fit:cover}
 .portal-announcement-media video{background:#291720;object-fit:contain}
+.portal-announcement-video-draft{position:relative;width:100%;height:100%}
+.portal-announcement-video-draft>img,.portal-announcement-video-draft>.portal-announcement-placeholder{width:100%;height:100%;object-fit:cover}
+.portal-announcement-video-draft>span{position:absolute;right:12px;bottom:12px;left:12px;padding:9px 12px;border-radius:10px;background:rgba(45,20,31,.88);color:#fff;font-size:.79rem;font-weight:800;text-align:center}
 .portal-announcement-placeholder{display:grid;place-content:center;gap:7px;width:100%;height:100%;background:linear-gradient(145deg,#72183c,#b6774e);color:#fff;text-align:center}
 .portal-announcement-placeholder span{font-size:.78rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;opacity:.8}
 .portal-announcement-placeholder strong{font-size:clamp(1.4rem,4vw,2.2rem);line-height:1.1}
