@@ -2,7 +2,7 @@
 
 @section('title', 'Mi perfil')
 @push('head')
-<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20260930-1">
+<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20261003-2">
 @endpush
 
 @section('content')
