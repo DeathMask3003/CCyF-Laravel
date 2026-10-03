@@ -2,7 +2,7 @@
 
 @section('title', 'Mi perfil')
 @push('head')
-<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20261003-2">
+<link rel="stylesheet" href="{{ asset('css/profile-signature.css') }}?v=20261003-3">
 @endpush
 
 @section('content')
@@ -12,9 +12,9 @@
 </div>
 
 <div class="profile-summary panel">
-    <div class="profile-avatar" aria-hidden="true">@if($photoAvailable)<img src="{{ route('perfil.photo') }}" alt="">@else{{ mb_substr($user->usu_area, 0, 1) }}@endif</div>
+    <div class="profile-avatar" id="profile-photo-preview" aria-hidden="true">@if($photoAvailable)<img src="{{ route('perfil.photo') }}" alt="">@else{{ mb_substr($user->usu_area, 0, 1) }}@endif</div>
     <div><strong>{{ $user->usu_area }}</strong><span>{{ $user->usu_correo }}</span></div>
-    <form method="post" action="{{ route('perfil.photo-upload') }}" enctype="multipart/form-data" class="profile-photo-form">@csrf<label for="profile-photo">Foto de perfil</label><input id="profile-photo" name="foto" type="file" accept="image/png,image/jpeg,image/webp" required><button type="submit" class="outline-button">Actualizar foto</button>@error('foto')<small class="field-error">{{ $message }}</small>@enderror</form>
+    <form method="post" action="{{ route('perfil.photo-upload') }}" enctype="multipart/form-data" class="profile-photo-form">@csrf<label for="profile-photo">Foto de perfil</label><input id="profile-photo" name="foto" type="file" accept="image/png,image/jpeg,image/webp" required><button type="submit" class="outline-button">Actualizar foto</button><button type="button" class="photo-preview-reset" id="photo-preview-reset" hidden>Cancelar vista previa</button><small class="photo-preview-message" id="photo-preview-message" role="status" hidden></small>@error('foto')<small class="field-error">{{ $message }}</small>@enderror</form>
     <span class="pill pill-ready">Cuenta activa</span>
 </div>
 
@@ -130,5 +130,60 @@ signatureInput?.addEventListener('change', () => {
     image.onload = () => URL.revokeObjectURL(url);
     image.src = url;
 });
+const photoInput = document.getElementById('profile-photo');
+const profileAvatar = document.getElementById('profile-photo-preview');
+const headerAvatar = document.querySelector('[data-header-avatar]');
+const photoMessage = document.getElementById('photo-preview-message');
+const photoReset = document.getElementById('photo-preview-reset');
+if (photoInput && profileAvatar && photoMessage && photoReset) {
+    const originalProfile = profileAvatar.innerHTML;
+    const originalHeader = headerAvatar?.innerHTML;
+    let previewUrl = null;
+    const showMessage = (message, isError = false) => {
+        photoMessage.textContent = message;
+        photoMessage.hidden = !message;
+        photoMessage.classList.toggle('is-error', isError);
+    };
+    const restorePreview = () => {
+        profileAvatar.innerHTML = originalProfile;
+        if (headerAvatar) headerAvatar.innerHTML = originalHeader;
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = null;
+        photoReset.hidden = true;
+    };
+    photoInput.addEventListener('change', () => {
+        restorePreview();
+        const file = photoInput.files?.[0];
+        if (!file) { showMessage(''); return; }
+        if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 3 * 1024 * 1024) {
+            photoInput.value = '';
+            showMessage('Elige una imagen PNG, JPG o WEBP de máximo 3 MB.', true);
+            return;
+        }
+        const url = URL.createObjectURL(file);
+        previewUrl = url;
+        const image = new Image();
+        image.alt = '';
+        image.onload = () => {
+            if (previewUrl !== url) return;
+            profileAvatar.replaceChildren(image);
+            if (headerAvatar) headerAvatar.replaceChildren(image.cloneNode());
+            photoReset.hidden = false;
+            showMessage('Vista previa en el perfil y el menú. La foto aún no se ha guardado.');
+        };
+        image.onerror = () => {
+            if (previewUrl !== url) return;
+            restorePreview();
+            photoInput.value = '';
+            showMessage('No se pudo abrir esta imagen. Elige otro archivo.', true);
+        };
+        image.src = url;
+    });
+    photoReset.addEventListener('click', () => {
+        photoInput.value = '';
+        restorePreview();
+        showMessage('');
+    });
+}
 </script>
 @endsection

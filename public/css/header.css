@@ -18,6 +18,10 @@
 .account-dropdown[open] summary .account-avatar,.account-dropdown[open] summary .account-name{transform:none}
 .account-dropdown[open] summary .account-chevron{transform:rotate(180deg)}
 .account-dropdown .nav-dropdown-menu{left:auto;right:0;min-width:205px}
+.account-dropdown .nav-dropdown-menu{width:max-content;max-width:min(320px,calc(100vw - 32px))}
+.account-identity{display:grid;gap:4px;min-width:0;padding:10px 12px 12px;margin-bottom:4px;border-bottom:1px solid #eee5e9;color:#4d2034}
+.account-identity small{font-size:.67rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#9a6e83}
+.account-identity strong{font-size:.86rem;line-height:1.35;overflow-wrap:anywhere;white-space:normal}
 .account-dropdown .nav-dropdown-menu a,.account-dropdown .nav-dropdown-menu a:hover{text-decoration:none}
 .account-dropdown .nav-dropdown-menu form{border-top:1px solid #eee5e9;margin-top:4px;padding-top:4px}
 .account-signout{display:block;width:100%;min-height:39px;border:0;border-radius:8px;padding:9px 12px;background:transparent;color:#822747;text-align:left;font-size:.84rem;font-weight:700;cursor:pointer}
